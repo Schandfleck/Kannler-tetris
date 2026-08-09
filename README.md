@@ -3,6 +3,9 @@
 ## Install
 
 ### 1. Clone the Repo
+
+`git clone https://github.com/Schandfleck/Kannler-tetris.git`
+
 ___
 
 ### 2. Install node
@@ -18,6 +21,8 @@ Arch
 ```
 sudo pacman -S node
 ```
+
+___
 
 ### 3. Run the Server
 
