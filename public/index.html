@@ -12,6 +12,7 @@
   <div id="mode-selection" class="mode-menu">
     <h1>Tetris Battle</h1>
     <div class="menu-buttons">
+      <button class="btn-menu" id="btn-solo-mode">🕹️ Solo (Score & Speedup)</button>
       <button class="btn-menu" id="btn-local-mode">🎮 Lokal 2-Spieler</button>
       <button class="btn-menu" id="btn-online-mode">🌐 Online Match Suchen</button>
     </div>
@@ -21,7 +22,14 @@
   <div id="game-wrapper" class="hidden">
     <div class="top-bar">
       <div id="status">Warte auf Matchmaking...</div>
+
+      <!-- STATS ANZEIGE (Score & Level für Solo-Modus) -->
+      <div id="score-display" class="hidden" style="color: #ffcc00; font-weight: bold; font-size: 1.1rem;">
+        Punkte: <span id="score-val">0</span> | Level: <span id="level-val">1</span>
+      </div>
+
       <div id="room-display" class="hidden" style="color: #00f0f0; font-weight: bold;">Raum: -</div>
+
       <div class="top-right-group">
         <div id="gamepad-status" class="gamepad-status-badge">🎮 Controller: Nicht erkannt</div>
         <button class="btn-settings" id="open-settings-btn">⚙️ Steuerung</button>
@@ -29,7 +37,7 @@
     </div>
 
     <div class="arena-container">
-      <!-- SPIELER 1 (Lokal oder Eigenes Feld Online) -->
+      <!-- SPIELER 1 (Solo / Lokal / Eigenes Feld Online) -->
       <div class="player-area" id="player-1-area">
         <div class="side-panel">
           <div class="player-name" id="p1-title">Spieler 1</div>
@@ -37,11 +45,15 @@
             <div class="panel-title">Hold</div>
             <canvas id="hold-board-1" width="96" height="96"></canvas>
           </div>
+          <div class="panel-box">
+            <div class="panel-title">Next</div>
+            <canvas id="next-board-1" width="96" height="96"></canvas>
+          </div>
         </div>
         <canvas id="board-1" class="board-canvas" width="240" height="480"></canvas>
       </div>
 
-      <!-- SPIELER 2 (Wird im Online-Modus ausgeblendet) -->
+      <!-- SPIELER 2 (Wird im Solo- und Online-Modus ausgeblendet) -->
       <div class="player-area" id="player-2-area">
         <canvas id="board-2" class="board-canvas" width="240" height="480"></canvas>
         <div class="side-panel">
@@ -49,6 +61,10 @@
           <div class="panel-box">
             <div class="panel-title">Hold</div>
             <canvas id="hold-board-2" width="96" height="96"></canvas>
+          </div>
+          <div class="panel-box">
+            <div class="panel-title">Next</div>
+            <canvas id="next-board-2" width="96" height="96"></canvas>
           </div>
         </div>
       </div>
@@ -61,6 +77,10 @@
       <div class="modal-header">🎮 Steuerung anpassen</div>
       <div class="config-tables">
         <div class="config-col">
+          <div class="setting-row">
+          <label for="bgm-volume-slider">🎵 Lautstärke Musik:</label>
+          <input type="range" id="bgm-volume-slider" min="0" max="1" step="0.05" value="0.3">
+          </div>
           <h3 style="color:#ffaa00;">Spieler 1 / Du</h3>
           <div class="key-row"><span>Links:</span> <button class="key-btn" data-player="1" data-action="left"></button></div>
           <div class="key-row"><span>Rechts:</span> <button class="key-btn" data-player="1" data-action="right"></button></div>

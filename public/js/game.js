@@ -4,9 +4,31 @@ const COLS = 10;
 const ROWS = 20;
 const BLOCK_SIZE = 24;
 
-let gameMode = null; // 'local' oder 'online'
+let gameMode = null; // 'solo', 'local' oder 'online'
 let currentRoomId = null;
 let myOnlineIndex = 1;
+
+// Solo-Modus Score & Speed-Variablen
+let score = 0;
+let level = 1;
+let dropInterval = 800; // Start: 800ms pro Blockfall
+
+// AUDIO SETTINGS & STEUERUNG
+const bgm = new Audio('/audio/bgm.mp3');
+bgm.loop = true;
+bgm.volume = parseFloat(localStorage.getItem('tetris_bgm_volume')) || 0.3;
+
+function playBGM() {
+  bgm.play().catch(() => {
+    // Falls Autoplay vom Browser blockiert wird, startet die Musik beim ersten Tastendruck
+    console.log('Autoplay blockiert – Musik wartet auf Interaktion.');
+  });
+}
+
+function stopBGM() {
+  bgm.pause();
+  bgm.currentTime = 0;
+}
 
 const COLORS = [
   null,
@@ -74,26 +96,48 @@ const gamepadRepeatTimers = {};
 const channel = new BroadcastChannel('tetris_referee_channel');
 
 channel.onmessage = (event) => {
-  if (gameMode === 'local') {
+  if (gameMode === 'local' || gameMode === 'solo') {
     if (event.data.type === 'START_GAME') startCountdown();
     else if (event.data.type === 'RESET_GAME') resetGame();
   }
 };
 
 // MENÜ SELEKTION
+document.getElementById('btn-solo-mode').addEventListener('click', () => {
+  gameMode = 'solo';
+  setupGameUI();
+  startCountdown();
+});
+
 document.getElementById('btn-local-mode').addEventListener('click', () => {
   gameMode = 'local';
-  document.getElementById('mode-selection').classList.add('hidden');
-  document.getElementById('game-wrapper').classList.remove('hidden');
-  document.getElementById('p2-controls-col').style.display = 'block';
-  document.getElementById('room-display').classList.add('hidden');
-  initGame();
+  setupGameUI();
 });
 
 document.getElementById('btn-online-mode').addEventListener('click', () => {
   gameMode = 'online';
   if (socket) socket.emit('find_match');
 });
+
+function setupGameUI() {
+  document.getElementById('mode-selection').classList.add('hidden');
+  document.getElementById('game-wrapper').classList.remove('hidden');
+
+  if (gameMode === 'solo') {
+    document.getElementById('player-2-area').classList.add('hidden');
+    document.getElementById('p2-controls-col').style.display = 'none';
+    document.getElementById('room-display').classList.add('hidden');
+    document.getElementById('score-display').classList.remove('hidden');
+    document.getElementById('p1-title').innerText = 'Solo Spieler';
+  } else if (gameMode === 'local') {
+    document.getElementById('player-2-area').classList.remove('hidden');
+    document.getElementById('p2-controls-col').style.display = 'block';
+    document.getElementById('room-display').classList.add('hidden');
+    document.getElementById('score-display').classList.add('hidden');
+    document.getElementById('p1-title').innerText = 'Spieler 1';
+  }
+  initGame();
+}
 
 // SOCKET EVENTS (ONLINE)
 if (socket) {
@@ -104,6 +148,7 @@ if (socket) {
     document.getElementById('game-wrapper').classList.remove('hidden');
     document.getElementById('player-2-area').classList.add('hidden');
     document.getElementById('p2-controls-col').style.display = 'none';
+    document.getElementById('score-display').classList.add('hidden');
 
     const roomDisplay = document.getElementById('room-display');
     roomDisplay.innerText = `Raum: ${roomId}`;
@@ -125,13 +170,8 @@ if (socket) {
     }
   });
 
-  socket.on('referee_start_game', () => {
-    startCountdown();
-  });
-
-  socket.on('referee_reset_game', () => {
-    resetGame();
-  });
+  socket.on('referee_start_game', () => startCountdown());
+  socket.on('referee_reset_game', () => resetGame());
 
   socket.on('receive_garbage', ({ lines }) => {
     if (gameActive && players[0]) sendGarbage(players[0], lines);
@@ -139,15 +179,21 @@ if (socket) {
 
     socket.on('opponent_game_over', () => {
       gameActive = false;
+      stopBGM();
       document.getElementById('status').innerText = '🏆 GEGNER HAT VERLOREN – DU GEWINNST!';
       document.getElementById('status').style.color = '#00ff88';
     });
 
     socket.on('opponent_disconnected', () => {
       gameActive = false;
+      stopBGM();
       document.getElementById('status').innerText = '❌ Gegner hat die Verbindung getrennt.';
       document.getElementById('status').style.color = '#ff0055';
     });
+}
+
+function getRandomPieceId() {
+  return Math.floor(Math.random() * 7) + 1;
 }
 
 function createPlayer(id) {
@@ -157,9 +203,12 @@ function createPlayer(id) {
     ctx: document.getElementById(`board-${id}`)?.getContext('2d'),
     holdCanvas: document.getElementById(`hold-board-${id}`),
     holdCtx: document.getElementById(`hold-board-${id}`)?.getContext('2d'),
+    nextCanvas: document.getElementById(`next-board-${id}`),
+    nextCtx: document.getElementById(`next-board-${id}`)?.getContext('2d'),
     grid: createGrid(),
     currentPiece: null,
     currentPieceId: null,
+    nextPieceId: getRandomPieceId(),
     currentX: 0,
     currentY: 0,
     heldPieceId: null,
@@ -171,12 +220,22 @@ function createPlayer(id) {
 let players = [];
 
 function initGame() {
+  score = 0;
+  level = 1;
+  dropInterval = 800;
+  updateScoreUI();
+
   if (gameMode === 'local') {
     players = [createPlayer(1), createPlayer(2)];
   } else {
     players = [createPlayer(1)];
   }
   draw();
+}
+
+function updateScoreUI() {
+  document.getElementById('score-val').innerText = score;
+  document.getElementById('level-val').innerText = level;
 }
 
 function createGrid() {
@@ -186,10 +245,17 @@ function createGrid() {
 function startCountdown() {
   if (gameActive || isCountingDown) return;
 
+  stopBGM();
+  score = 0;
+  level = 1;
+  dropInterval = 800;
+  updateScoreUI();
+
   players.forEach(p => {
     p.grid = createGrid();
     p.heldPieceId = null;
     p.canHold = true;
+    p.nextPieceId = getRandomPieceId();
     spawnPiece(p);
   });
 
@@ -217,6 +283,7 @@ function startCountdown() {
       isCountingDown = false;
       gameActive = true;
       statusEl.innerText = '🔥 MATCH LÄUFT!';
+      playBGM(); // Musik beim Spielstart starten
     }
   }, 1000);
 }
@@ -228,23 +295,33 @@ function resetGame() {
   }
   isCountingDown = false;
   gameActive = false;
+  stopBGM();
   initGame();
 
-  document.getElementById('status').innerText = 'Warte auf Freigabe durch Referee...';
+  document.getElementById('status').innerText = 'Warte auf Freigabe...';
   document.getElementById('status').style.color = '#ffaa00';
 }
 
 function spawnPiece(player, specificId = null) {
-  const id = specificId !== null ? specificId : (Math.floor(Math.random() * 7) + 1);
-  player.currentPieceId = id;
-  player.currentPiece = SHAPES[id];
+  if (specificId !== null) {
+    player.currentPieceId = specificId;
+  } else {
+    player.currentPieceId = player.nextPieceId;
+    player.nextPieceId = getRandomPieceId();
+  }
+
+  player.currentPiece = SHAPES[player.currentPieceId];
   player.currentY = 0;
   player.currentX = Math.floor((COLS - player.currentPiece[0].length) / 2);
   player.canHold = true;
 
   if (collide(player.grid, player.currentPiece, player.currentX, player.currentY)) {
     gameActive = false;
-    if (gameMode === 'local') {
+    stopBGM(); // Musik stopp bei Game Over
+
+    if (gameMode === 'solo') {
+      document.getElementById('status').innerText = `💥 GAME OVER – ENDSCORE: ${score}`;
+    } else if (gameMode === 'local') {
       const winnerId = player.id === 1 ? 2 : 1;
       document.getElementById('status').innerText = `🏆 GAME OVER – SPIELER ${winnerId} GEWINNT!`;
     } else {
@@ -308,17 +385,31 @@ function clearLines(player) {
     }
   }
 
-  if (clearedLines >= 2) {
-    let garbageToSend = 0;
-    if (clearedLines === 2) garbageToSend = 1;
-    else if (clearedLines === 3) garbageToSend = 2;
-    else if (clearedLines >= 4) garbageToSend = 4;
+  if (clearedLines > 0) {
+    if (gameMode === 'solo') {
+      const pointsTable = [0, 100, 300, 500, 800];
+      score += pointsTable[clearedLines] || (clearedLines * 200);
 
-    if (gameMode === 'local') {
-      const targetPlayer = players.find(p => p.id !== player.id);
-      sendGarbage(targetPlayer, garbageToSend);
+      const newLevel = Math.floor(score / 1000) + 1;
+      if (newLevel > level) {
+        level = newLevel;
+        dropInterval = Math.max(100, 800 - (level - 1) * 35);
+      }
+      updateScoreUI();
     } else {
-      if (socket) socket.emit('send_garbage', { roomId: currentRoomId, lines: garbageToSend });
+      if (clearedLines >= 2) {
+        let garbageToSend = 0;
+        if (clearedLines === 2) garbageToSend = 1;
+        else if (clearedLines === 3) garbageToSend = 2;
+        else if (clearedLines >= 4) garbageToSend = 4;
+
+        if (gameMode === 'local') {
+          const targetPlayer = players.find(p => p.id !== player.id);
+          sendGarbage(targetPlayer, garbageToSend);
+        } else {
+          if (socket) socket.emit('send_garbage', { roomId: currentRoomId, lines: garbageToSend });
+        }
+      }
     }
   }
 }
@@ -396,7 +487,6 @@ function handleAction(playerIndex, action) {
   }
 }
 
-// HAUPT-UPDATE-SCHLEIFE (Läuft permanent für Gameplay & Gamepad-Polling)
 function mainLoop(time = 0) {
   const deltaTime = time - lastTime;
   lastTime = time;
@@ -406,7 +496,7 @@ function mainLoop(time = 0) {
   if (gameActive) {
     players.forEach(p => {
       p.dropCounter += deltaTime;
-      if (p.dropCounter > 800) {
+      if (p.dropCounter > dropInterval) {
         moveDown(p);
       }
     });
@@ -422,6 +512,7 @@ function draw() {
     drawGhostPiece(p);
     drawActivePiece(p);
     drawHoldPiece(p);
+    drawNextPiece(p);
   });
 }
 
@@ -517,6 +608,27 @@ function drawHoldPiece(player) {
   }
 }
 
+function drawNextPiece(player) {
+  const ctx = player.nextCtx;
+  if (!ctx) return;
+  ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+
+  if (player.nextPieceId === null) return;
+
+  const piece = SHAPES[player.nextPieceId];
+  const offsetX = (player.nextCanvas.width / BLOCK_SIZE - piece[0].length) / 2;
+  const offsetY = (player.nextCanvas.height / BLOCK_SIZE - piece.length) / 2;
+
+  for (let r = 0; r < piece.length; r++) {
+    for (let c = 0; c < piece[r].length; c++) {
+      const type = piece[r][c];
+      if (type !== 0) {
+        drawBlock(ctx, type, offsetX + c, offsetY + r);
+      }
+    }
+  }
+}
+
 // TASTATUR INPUT
 document.addEventListener('keydown', (e) => {
   if (listeningButton) {
@@ -547,7 +659,6 @@ document.addEventListener('keydown', (e) => {
   });
 });
 
-// EVENT LISTENER FÜR GAMEPAD ANSCHLUSS/TRENNUNG
 window.addEventListener('gamepadconnected', (e) => {
   console.log('Gamepad verbunden:', e.gamepad.id);
 });
@@ -556,7 +667,6 @@ window.addEventListener('gamepaddisconnected', (e) => {
   console.log('Gamepad getrennt:', e.gamepad.id);
 });
 
-// GAMEPAD INPUT POLLING
 function pollGamepads(deltaTime) {
   const rawGamepads = navigator.getGamepads ? navigator.getGamepads() : [];
   let connectedCount = 0;
@@ -639,10 +749,19 @@ function bindGamepadInput(btnElement, bindObj) {
   updateKeyLabels();
 }
 
-// MODAL UI
+// MODAL & AUDIO UI
 const modal = document.getElementById('settings-modal');
 document.getElementById('open-settings-btn').addEventListener('click', () => modal.classList.add('active'));
 document.getElementById('close-settings-btn').addEventListener('click', () => modal.classList.remove('active'));
+
+const volumeSlider = document.getElementById('bgm-volume-slider');
+if (volumeSlider) {
+  volumeSlider.value = bgm.volume;
+  volumeSlider.addEventListener('input', (e) => {
+    bgm.volume = parseFloat(e.target.value);
+    localStorage.setItem('tetris_bgm_volume', bgm.volume);
+  });
+}
 
 function formatBindLabel(bind) {
   if (!bind) return '-';
@@ -670,6 +789,4 @@ document.querySelectorAll('.key-btn').forEach(btn => {
 });
 
 updateKeyLabels();
-
-// Starte den dauerhaften Loop direkt beim Laden der Datei
 requestAnimationFrame(mainLoop);
