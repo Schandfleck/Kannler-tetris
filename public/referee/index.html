@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tetris Referee Dashboard</title>
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; background: #111; color: #fff; padding: 20px; margin: 0; }
+    h1, h2 { color: #00f0f0; }
+    .card { background: #222; border: 1px solid #444; border-radius: 8px; padding: 20px; margin-bottom: 20px; }
+    button { padding: 10px 20px; font-size: 15px; margin-right: 10px; cursor: pointer; border: none; border-radius: 4px; transition: opacity 0.2s; }
+    button:hover { opacity: 0.85; }
+    button:disabled { opacity: 0.3; cursor: not-allowed; }
+    .btn-start { background: #00ff88; color: #000; font-weight: bold; }
+    .btn-reset { background: #ff0055; color: #fff; font-weight: bold; }
+    .room-item { display: flex; justify-content: space-between; align-items: center; background: #333; padding: 12px; margin-top: 10px; border-radius: 6px; }
+    .status-badge { padding: 4px 8px; border-radius: 4px; font-size: 12px; text-transform: uppercase; font-weight: bold; }
+    .status-waiting { background: #ffaa00; color: #000; }
+    .status-running { background: #00ff88; color: #000; }
+    .status-finished { background: #777; color: #fff; }
+    code { font-family: monospace; font-size: 1.1em; color: #00f0f0; }
+  </style>
+</head>
+<body>
+
+  <h1>🏆 Tetris Referee Dashboard</h1>
+
+  <!-- LOKALES MATCH -->
+  <div class="card">
+    <h2>🎮 Lokales Match (Gleicher Browser)</h2>
+    <button class="btn-start" onclick="sendLocal('START_GAME')">▶ Lokal Starten</button>
+    <button class="btn-reset" onclick="sendLocal('RESET_GAME')">↺ Lokal Zurücksetzen</button>
+  </div>
+
+  <!-- ONLINE RÄUME -->
+  <div class="card">
+    <h2>🌐 Online Räume</h2>
+    <div id="room-list">Verbinde zum Server...</div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+    const channel = new BroadcastChannel('tetris_referee_channel');
+
+    function sendLocal(type) {
+      channel.postMessage({ type: type });
+    }
+
+    function startOnlineRoom(roomId) {
+      socket.emit('referee_start_room', { roomId });
+    }
+
+    function resetOnlineRoom(roomId) {
+      socket.emit('referee_reset_room', { roomId });
+    }
+
+    // Sobald die Verbindung steht, fordere die Räume an
+    socket.on('connect', () => {
+      socket.emit('referee_get_rooms');
+    });
+
+    // Raumliste empfangen
+    socket.on('referee_room_list', renderRooms);
+
+    function renderRooms(rooms) {
+      const container = document.getElementById('room-list');
+      if (!rooms || rooms.length === 0) {
+        container.innerHTML = '<p style="color: #888;">Keine aktiven Online-Räume vorhanden.</p>';
+        return;
+      }
+
+      container.innerHTML = rooms.map(room => {
+        let badgeClass = 'status-waiting';
+        if (room.status === 'running') badgeClass = 'status-running';
+        if (room.status === 'finished') badgeClass = 'status-finished';
+
+        return `
+          <div class="room-item">
+            <div>
+              <strong>Raum ID:</strong> <code>${room.id}</code> |
+              <strong>Spieler:</strong> ${room.playerCount}/2 |
+              <span class="status-badge ${badgeClass}">${room.status}</span>
+            </div>
+            <div>
+              <button class="btn-start" ${room.playerCount < 2 ? 'disabled' : ''} onclick="startOnlineRoom('${room.id}')">
+                ▶ Starten
+              </button>
+              <button class="btn-reset" onclick="resetOnlineRoom('${room.id}')">
+                ↺ Zurücksetzen
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+  </script>
+</body>
+</html>

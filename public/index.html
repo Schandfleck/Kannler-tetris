@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tetris Battle</title>
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+
+  <!-- MODUS AUSWAHLMENÜ -->
+  <div id="mode-selection" class="mode-menu">
+    <h1>Tetris Battle</h1>
+    <div class="menu-buttons">
+      <button class="btn-menu" id="btn-local-mode">🎮 Lokal 2-Spieler</button>
+      <button class="btn-menu" id="btn-online-mode">🌐 Online Match Suchen</button>
+    </div>
+  </div>
+
+  <!-- SPIELBEREICH -->
+  <div id="game-wrapper" class="hidden">
+    <div class="top-bar">
+      <div id="status">Warte auf Matchmaking...</div>
+      <div id="room-display" class="hidden" style="color: #00f0f0; font-weight: bold;">Raum: -</div>
+      <div class="top-right-group">
+        <div id="gamepad-status" class="gamepad-status-badge">🎮 Controller: Nicht erkannt</div>
+        <button class="btn-settings" id="open-settings-btn">⚙️ Steuerung</button>
+      </div>
+    </div>
+
+    <div class="arena-container">
+      <!-- SPIELER 1 (Lokal oder Eigenes Feld Online) -->
+      <div class="player-area" id="player-1-area">
+        <div class="side-panel">
+          <div class="player-name" id="p1-title">Spieler 1</div>
+          <div class="panel-box">
+            <div class="panel-title">Hold</div>
+            <canvas id="hold-board-1" width="96" height="96"></canvas>
+          </div>
+        </div>
+        <canvas id="board-1" class="board-canvas" width="240" height="480"></canvas>
+      </div>
+
+      <!-- SPIELER 2 (Wird im Online-Modus ausgeblendet) -->
+      <div class="player-area" id="player-2-area">
+        <canvas id="board-2" class="board-canvas" width="240" height="480"></canvas>
+        <div class="side-panel">
+          <div class="player-name p2-name" id="p2-title">Spieler 2</div>
+          <div class="panel-box">
+            <div class="panel-title">Hold</div>
+            <canvas id="hold-board-2" width="96" height="96"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- EINSTELLUNGEN MODAL -->
+  <div class="modal-overlay" id="settings-modal">
+    <div class="modal-content">
+      <div class="modal-header">🎮 Steuerung anpassen</div>
+      <div class="config-tables">
+        <div class="config-col">
+          <h3 style="color:#ffaa00;">Spieler 1 / Du</h3>
+          <div class="key-row"><span>Links:</span> <button class="key-btn" data-player="1" data-action="left"></button></div>
+          <div class="key-row"><span>Rechts:</span> <button class="key-btn" data-player="1" data-action="right"></button></div>
+          <div class="key-row"><span>Soft Drop:</span> <button class="key-btn" data-player="1" data-action="down"></button></div>
+          <div class="key-row"><span>Hard Drop:</span> <button class="key-btn" data-player="1" data-action="drop"></button></div>
+          <div class="key-row"><span>Drehen Links:</span> <button class="key-btn" data-player="1" data-action="rotLeft"></button></div>
+          <div class="key-row"><span>Drehen Rechts:</span> <button class="key-btn" data-player="1" data-action="rotRight"></button></div>
+          <div class="key-row"><span>Hold:</span> <button class="key-btn" data-player="1" data-action="hold"></button></div>
+        </div>
+        <div class="config-col" id="p2-controls-col">
+          <h3 style="color:#00aaff;">Spieler 2</h3>
+          <div class="key-row"><span>Links:</span> <button class="key-btn" data-player="2" data-action="left"></button></div>
+          <div class="key-row"><span>Rechts:</span> <button class="key-btn" data-player="2" data-action="right"></button></div>
+          <div class="key-row"><span>Soft Drop:</span> <button class="key-btn" data-player="2" data-action="down"></button></div>
+          <div class="key-row"><span>Hard Drop:</span> <button class="key-btn" data-player="2" data-action="drop"></button></div>
+          <div class="key-row"><span>Drehen Links:</span> <button class="key-btn" data-player="2" data-action="rotLeft"></button></div>
+          <div class="key-row"><span>Drehen Rechts:</span> <button class="key-btn" data-player="2" data-action="rotRight"></button></div>
+          <div class="key-row"><span>Hold:</span> <button class="key-btn" data-player="2" data-action="hold"></button></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-save" id="close-settings-btn">Fertig</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/game.js"></script>
+</body>
+</html>
