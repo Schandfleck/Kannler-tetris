@@ -10,13 +10,37 @@
 
   <!-- MODUS AUSWAHLMENÜ -->
   <div id="mode-selection" class="mode-menu">
-    <h1>Tetris Battle</h1>
+    <h1><img src="/pics/title.png" alt="Title Top" id="main-title-top-img"> </h1>
+    <h1><img src="/pics/titlebottom.png" alt="Tetris Multiplayer" id="main-title-screen-img"></h1>
     <div class="menu-buttons">
       <button class="btn-menu" id="btn-solo-mode">🕹️ Solo (Score & Speedup)</button>
-      <button class="btn-menu" id="btn-local-mode">🎮 Lokal 2-Spieler</button>
-      <button class="btn-menu" id="btn-online-mode">🌐 Online Match Suchen</button>
+      <button class="btn-menu2" id="btn-local-mode">🎮 Lokal 2-Spieler</button>
+      <button class="btn-menu3" id="btn-online-mode">🌐 Online Match Suchen</button>
     </div>
   </div>
+<!-- Bild unten Rechts -->
+  <img src="/pics/wappen.png" alt="Kandel Wappen" id="menu-bottom-right-img">
+
+
+<!-- Solo Level & Modus Auswahl -->
+<div id="solo-level-selection" class="hidden">
+  <h2>🎯 Modus & Level wählen</h2>
+  <p style="color: #aaa; margin-bottom: 15px;">Wähle ein Level (Ziel: 10.000 Pkt.) oder spiele den Endlos-Modus!</p>
+
+  <!-- Endlos-Modus Button -->
+  <div style="margin-bottom: 20px;">
+    <button id="btn-endless-mode" style="width: 100%; padding: 15px; font-size: 1.2rem; font-weight: bold; background-color: #ff00ff; color: #fff; cursor: pointer; border: none; border-radius: 6px;">
+      ♾️ ENDLOS MODUS
+    </button>
+  </div>
+
+  <h3>Level Kampagne</h3>
+  <div id="level-buttons-container" style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 20px;">
+    <!-- Buttons werden dynamisch via JS erzeugt -->
+  </div>
+
+  <button id="btn-back-to-menu" style="padding: 10px 20px;">⬅ Zurück zum Hauptmenü</button>
+</div>
 
   <!-- SPIELBEREICH -->
   <div id="game-wrapper" class="hidden">

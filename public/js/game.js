@@ -4,23 +4,38 @@ const COLS = 10;
 const ROWS = 20;
 const BLOCK_SIZE = 24;
 
-let gameMode = null; // 'solo', 'local' oder 'online'
+let gameMode = null; // 'solo', 'endless', 'local' oder 'online'
 let currentRoomId = null;
 let myOnlineIndex = 1;
 
-// Solo-Modus Score & Speed-Variablen
+// SOLO LEVEL & SCORE SYSTEM
 let score = 0;
 let level = 1;
-let dropInterval = 800; // Start: 800ms pro Blockfall
+let maxUnlockedLevel = parseInt(localStorage.getItem('tetris_unlocked_level')) || 1;
+const TARGET_SCORE = 10000;
 
-// AUDIO SETTINGS & STEUERUNG
+const LEVEL_SPEEDS = {
+  1: 800,
+  2: 700,
+  3: 600,
+  4: 500,
+  5: 420,
+  6: 350,
+  7: 280,
+  8: 220,
+  9: 170,
+  10: 120
+};
+
+let dropInterval = LEVEL_SPEEDS[1];
+
+// AUDIO SETTINGS
 const bgm = new Audio('/audio/bgm.mp3');
 bgm.loop = true;
 bgm.volume = parseFloat(localStorage.getItem('tetris_bgm_volume')) || 0.3;
 
 function playBGM() {
   bgm.play().catch(() => {
-    // Falls Autoplay vom Browser blockiert wird, startet die Musik beim ersten Tastendruck
     console.log('Autoplay blockiert – Musik wartet auf Interaktion.');
   });
 }
@@ -50,15 +65,16 @@ BLOCK_IMAGE_SOURCES.forEach((src, index) => {
   blockImagesLoaded[index] = img;
 });
 
-const SHAPES = [
+// BASE SHAPES
+const ORIGINAL_SHAPES = [
   [],
-[[0,0,0,0],[1,1,1,1],[0,0,0,0],[0,0,0,0]],
-[[2,0,0],[2,2,2],[0,0,0]],
-[[0,0,3],[3,3,3],[0,0,0]],
-[[4,4],[4,4]],
-[[0,5,5],[5,5,0],[0,0,0]],
-[[0,6,0],[6,6,6],[0,0,0]],
-[[7,7,0],[0,7,7],[0,0,0]]
+[[0,0,0,0],[1,1,1,1],[0,0,0,0],[0,0,0,0]], // I
+[[2,0,0],[2,2,2],[0,0,0]],                // J
+[[0,0,3],[3,3,3],[0,0,0]],                // L
+[[4,4],[4,4]],                            // O
+[[0,5,5],[5,5,0],[0,0,0]],                // S
+[[0,6,0],[6,6,6],[0,0,0]],                // T
+[[7,7,0],[0,7,7],[0,0,0]]                 // Z
 ];
 
 const defaultControls = {
@@ -75,7 +91,7 @@ const defaultControls = {
     left: { type: 'key', code: 'ArrowLeft' },
     right: { type: 'key', code: 'ArrowRight' },
     down: { type: 'key', code: 'ArrowDown' },
-    drop: { type: 'key', code: 'ArrowUp' },
+    drop: { type: 'key', code: 'ArrowDown' },
     rotLeft: { type: 'key', code: 'KeyN' },
     rotRight: { type: 'key', code: 'KeyM' },
     hold: { type: 'key', code: 'ShiftRight' }
@@ -96,17 +112,20 @@ const gamepadRepeatTimers = {};
 const channel = new BroadcastChannel('tetris_referee_channel');
 
 channel.onmessage = (event) => {
-  if (gameMode === 'local' || gameMode === 'solo') {
+  if (gameMode === 'local' || gameMode === 'solo' || gameMode === 'endless') {
     if (event.data.type === 'START_GAME') startCountdown();
     else if (event.data.type === 'RESET_GAME') resetGame();
   }
 };
 
-// MENÜ SELEKTION
 document.getElementById('btn-solo-mode').addEventListener('click', () => {
-  gameMode = 'solo';
-  setupGameUI();
-  startCountdown();
+  document.getElementById('mode-selection').classList.add('hidden');
+  renderSoloLevelSelection();
+});
+
+document.getElementById('btn-back-to-menu')?.addEventListener('click', () => {
+  document.getElementById('solo-level-selection').classList.add('hidden');
+  document.getElementById('mode-selection').classList.remove('hidden');
 });
 
 document.getElementById('btn-local-mode').addEventListener('click', () => {
@@ -119,16 +138,67 @@ document.getElementById('btn-online-mode').addEventListener('click', () => {
   if (socket) socket.emit('find_match');
 });
 
+function renderSoloLevelSelection() {
+  const container = document.getElementById('level-buttons-container');
+  const endlessBtn = document.getElementById('btn-endless-mode');
+
+  if (!container) return;
+
+  container.innerHTML = '';
+  document.getElementById('solo-level-selection').classList.remove('hidden');
+
+  if (endlessBtn) {
+    endlessBtn.onclick = () => {
+      gameMode = 'endless';
+      dropInterval = 800;
+      document.getElementById('solo-level-selection').classList.add('hidden');
+      setupGameUI();
+      startCountdown();
+    };
+  }
+
+  for (let lvl = 1; lvl <= 10; lvl++) {
+    const btn = document.createElement('button');
+    btn.style.padding = '15px';
+    btn.style.fontSize = '1.1rem';
+    btn.style.cursor = 'pointer';
+
+    const isUnlocked = lvl <= maxUnlockedLevel;
+
+    if (isUnlocked) {
+      btn.innerText = `Lvl ${lvl}\n⚡ ${LEVEL_SPEEDS[lvl]}ms`;
+      btn.style.backgroundColor = '#00f0f0';
+      btn.style.color = '#000';
+      btn.style.fontWeight = 'bold';
+      btn.addEventListener('click', () => {
+        gameMode = 'solo';
+        level = lvl;
+        dropInterval = LEVEL_SPEEDS[lvl] || 800;
+        document.getElementById('solo-level-selection').classList.add('hidden');
+        setupGameUI();
+        startCountdown();
+      });
+    } else {
+      btn.innerText = `Lvl ${lvl}\n🔒 Gesperrt`;
+      btn.style.backgroundColor = '#444';
+      btn.style.color = '#888';
+      btn.disabled = true;
+    }
+
+    container.appendChild(btn);
+  }
+}
+
 function setupGameUI() {
   document.getElementById('mode-selection').classList.add('hidden');
   document.getElementById('game-wrapper').classList.remove('hidden');
 
-  if (gameMode === 'solo') {
+  if (gameMode === 'solo' || gameMode === 'endless') {
     document.getElementById('player-2-area').classList.add('hidden');
     document.getElementById('p2-controls-col').style.display = 'none';
     document.getElementById('room-display').classList.add('hidden');
     document.getElementById('score-display').classList.remove('hidden');
-    document.getElementById('p1-title').innerText = 'Solo Spieler';
+    document.getElementById('p1-title').innerText = gameMode === 'endless' ? 'Endlos Modus' : `Solo - Level ${level}`;
   } else if (gameMode === 'local') {
     document.getElementById('player-2-area').classList.remove('hidden');
     document.getElementById('p2-controls-col').style.display = 'block';
@@ -139,7 +209,6 @@ function setupGameUI() {
   initGame();
 }
 
-// SOCKET EVENTS (ONLINE)
 if (socket) {
   socket.on('init_player', ({ playerIndex, roomId }) => {
     myOnlineIndex = playerIndex;
@@ -208,6 +277,7 @@ function createPlayer(id) {
     grid: createGrid(),
     currentPiece: null,
     currentPieceId: null,
+    rotationIndex: 0,
     nextPieceId: getRandomPieceId(),
     currentX: 0,
     currentY: 0,
@@ -221,8 +291,11 @@ let players = [];
 
 function initGame() {
   score = 0;
-  level = 1;
-  dropInterval = 800;
+  if (gameMode === 'solo') {
+    dropInterval = LEVEL_SPEEDS[level] || 800;
+  } else {
+    dropInterval = 800;
+  }
   updateScoreUI();
 
   if (gameMode === 'local') {
@@ -234,8 +307,25 @@ function initGame() {
 }
 
 function updateScoreUI() {
-  document.getElementById('score-val').innerText = score;
-  document.getElementById('level-val').innerText = level;
+  const scoreVal = document.getElementById('score-val');
+  const levelVal = document.getElementById('level-val');
+
+  if (scoreVal) {
+    if (gameMode === 'endless') {
+      scoreVal.innerText = `${score} (Endlos)`;
+    } else {
+      scoreVal.innerText = `${score} / ${TARGET_SCORE}`;
+    }
+  }
+
+  if (levelVal) {
+    if (gameMode === 'endless') {
+      const currentEndlessLevel = Math.floor(score / 1000) + 1;
+      levelVal.innerText = `Endlos (Lvl ${currentEndlessLevel})`;
+    } else {
+      levelVal.innerText = level;
+    }
+  }
 }
 
 function createGrid() {
@@ -247,8 +337,11 @@ function startCountdown() {
 
   stopBGM();
   score = 0;
-  level = 1;
-  dropInterval = 800;
+  if (gameMode === 'solo') {
+    dropInterval = LEVEL_SPEEDS[level] || 800;
+  } else {
+    dropInterval = 800;
+  }
   updateScoreUI();
 
   players.forEach(p => {
@@ -283,7 +376,7 @@ function startCountdown() {
       isCountingDown = false;
       gameActive = true;
       statusEl.innerText = '🔥 MATCH LÄUFT!';
-      playBGM(); // Musik beim Spielstart starten
+      playBGM();
     }
   }, 1000);
 }
@@ -310,17 +403,20 @@ function spawnPiece(player, specificId = null) {
     player.nextPieceId = getRandomPieceId();
   }
 
-  player.currentPiece = SHAPES[player.currentPieceId];
+  player.currentPiece = ORIGINAL_SHAPES[player.currentPieceId];
+  player.rotationIndex = 0;
   player.currentY = 0;
   player.currentX = Math.floor((COLS - player.currentPiece[0].length) / 2);
   player.canHold = true;
 
   if (collide(player.grid, player.currentPiece, player.currentX, player.currentY)) {
     gameActive = false;
-    stopBGM(); // Musik stopp bei Game Over
+    stopBGM();
 
     if (gameMode === 'solo') {
-      document.getElementById('status').innerText = `💥 GAME OVER – ENDSCORE: ${score}`;
+      document.getElementById('status').innerText = `💥 GAME OVER – SCORE: ${score}/${TARGET_SCORE}`;
+    } else if (gameMode === 'endless') {
+      document.getElementById('status').innerText = `💥 GAME OVER – ENDSCORE: ${score} PUNKTE!`;
     } else if (gameMode === 'local') {
       const winnerId = player.id === 1 ? 2 : 1;
       document.getElementById('status').innerText = `🏆 GAME OVER – SPIELER ${winnerId} GEWINNT!`;
@@ -360,17 +456,70 @@ function collide(grid, piece, offsetX, offsetY) {
   return false;
 }
 
+function getPieceBounds(piece) {
+  let minR = piece.length, maxR = -1;
+  let minC = piece[0].length, maxC = -1;
+
+  for (let r = 0; r < piece.length; r++) {
+    for (let c = 0; c < piece[r].length; c++) {
+      if (piece[r][c] !== 0) {
+        if (r < minR) minR = r;
+        if (r > maxR) maxR = r;
+        if (c < minC) minC = c;
+        if (c > maxC) maxC = c;
+      }
+    }
+  }
+
+  return {
+    minR, maxR,
+    minC, maxC,
+    rows: maxR - minR + 1,
+    cols: maxC - minC + 1
+  };
+}
+
 function mergePiece(player) {
-  for (let r = 0; r < player.currentPiece.length; r++) {
-    for (let c = 0; c < player.currentPiece[r].length; c++) {
-      const type = player.currentPiece[r][c];
-      if (type !== 0) {
-        player.grid[player.currentY + r][player.currentX + c] = type;
+  const piece = player.currentPiece;
+  const type = player.currentPieceId;
+  const baseShape = ORIGINAL_SHAPES[type];
+  const bounds = getPieceBounds(baseShape);
+  const N = piece.length;
+
+  for (let r = 0; r < N; r++) {
+    for (let c = 0; c < N; c++) {
+      if (piece[r][c] !== 0) {
+        let origR = r;
+        let origC = c;
+
+        // Rückrechnung der Rotationen für das Original-Quellbild
+        if (player.rotationIndex === 1) {
+          origR = N - 1 - c;
+          origC = r;
+        } else if (player.rotationIndex === 2) {
+          origR = N - 1 - r;
+          origC = N - 1 - c;
+        } else if (player.rotationIndex === 3) {
+          origR = c;
+          origC = N - 1 - r;
+        }
+
+        const localC = origC - bounds.minC;
+        const localR = origR - bounds.minR;
+
+        player.grid[player.currentY + r][player.currentX + c] = {
+          type: type,
+          rot: player.rotationIndex,
+          localC: localC,
+          localR: localR
+        };
       }
     }
   }
   clearLines(player);
-  spawnPiece(player);
+  if (gameActive) {
+    spawnPiece(player);
+  }
 }
 
 function clearLines(player) {
@@ -386,16 +535,35 @@ function clearLines(player) {
   }
 
   if (clearedLines > 0) {
-    if (gameMode === 'solo') {
+    if (gameMode === 'solo' || gameMode === 'endless') {
       const pointsTable = [0, 100, 300, 500, 800];
       score += pointsTable[clearedLines] || (clearedLines * 200);
 
-      const newLevel = Math.floor(score / 1000) + 1;
-      if (newLevel > level) {
-        level = newLevel;
-        dropInterval = Math.max(100, 800 - (level - 1) * 35);
+      if (gameMode === 'endless') {
+        const speedMultiplier = Math.floor(score / 1000);
+        dropInterval = Math.max(50, 800 - (speedMultiplier * 40));
       }
+
       updateScoreUI();
+
+      if (gameMode === 'solo' && score >= TARGET_SCORE) {
+        gameActive = false;
+        stopBGM();
+
+        const statusEl = document.getElementById('status');
+        statusEl.innerText = `🎉 LEVEL ${level} GESCHAFFT! KEHRE INS MENÜ ZURÜCK...`;
+        statusEl.style.color = '#00ff88';
+
+        if (level >= maxUnlockedLevel) {
+          maxUnlockedLevel = level + 1;
+          localStorage.setItem('tetris_unlocked_level', maxUnlockedLevel);
+        }
+
+        setTimeout(() => {
+          document.getElementById('game-wrapper').classList.add('hidden');
+          renderSoloLevelSelection();
+        }, 2000);
+      }
     } else {
       if (clearedLines >= 2) {
         let garbageToSend = 0;
@@ -445,6 +613,7 @@ function attemptRotation(player, dir) {
       player.currentPiece = rotated;
       player.currentX += dx;
       player.currentY += dy;
+      player.rotationIndex = (player.rotationIndex + (dir === 'left' ? 3 : 1)) % 4;
       break;
     }
   }
@@ -516,14 +685,38 @@ function draw() {
   });
 }
 
-function drawBlock(ctx, type, x, y) {
-  if (!ctx) return;
-  const img = blockImagesLoaded[type];
+function drawBlock(ctx, cellData, x, y) {
+  if (!ctx || !cellData) return;
   const px = x * BLOCK_SIZE;
   const py = y * BLOCK_SIZE;
 
-  if (img && img.complete && img.naturalWidth !== 0) {
-    ctx.drawImage(img, px, py, BLOCK_SIZE, BLOCK_SIZE);
+  const type = typeof cellData === 'object' ? cellData.type : cellData;
+  const img = blockImagesLoaded[type];
+
+  if (img && img.complete && img.naturalWidth !== 0 && typeof cellData === 'object') {
+    const { rot, localC, localR } = cellData;
+    const baseShape = ORIGINAL_SHAPES[type];
+    const bounds = getPieceBounds(baseShape);
+
+    // Bildausschnitt der ungedrehten Grundform
+    const sourceX = (localC / bounds.cols) * img.naturalWidth;
+    const sourceY = (localR / bounds.rows) * img.naturalHeight;
+    const sourceW = img.naturalWidth / bounds.cols;
+    const sourceH = img.naturalHeight / bounds.rows;
+
+    ctx.save();
+    ctx.translate(px + BLOCK_SIZE / 2, py + BLOCK_SIZE / 2);
+
+    // Drehung um die eigene Achse für den jeweiligen Sub-Block
+    ctx.rotate((rot * 90 * Math.PI) / 180);
+
+    ctx.drawImage(
+      img,
+      sourceX, sourceY, sourceW, sourceH,
+      -BLOCK_SIZE / 2, -BLOCK_SIZE / 2, BLOCK_SIZE, BLOCK_SIZE
+    );
+
+    ctx.restore();
   } else {
     ctx.fillStyle = COLORS[type] || '#777';
     ctx.fillRect(px, py, BLOCK_SIZE, BLOCK_SIZE);
@@ -539,9 +732,54 @@ function drawBoard(player) {
 
   for (let r = 0; r < ROWS; r++) {
     for (let c = 0; c < COLS; c++) {
-      const type = player.grid[r][c];
-      if (type !== 0) {
-        drawBlock(ctx, type, c, r);
+      const cell = player.grid[r][c];
+      if (cell !== 0) {
+        drawBlock(ctx, cell, c, r);
+      }
+    }
+  }
+}
+
+function drawActivePiece(player) {
+  if (!player.currentPiece || !player.ctx) return;
+
+  const ctx = player.ctx;
+  const type = player.currentPieceId;
+  const baseShape = ORIGINAL_SHAPES[type];
+  const bounds = getPieceBounds(baseShape);
+  const N = player.currentPiece.length;
+
+  for (let r = 0; r < N; r++) {
+    for (let c = 0; c < N; c++) {
+      if (player.currentPiece[r][c] !== 0) {
+        let origR = r;
+        let origC = c;
+
+        if (player.rotationIndex === 1) {
+          origR = N - 1 - c;
+          origC = r;
+        } else if (player.rotationIndex === 2) {
+          origR = N - 1 - r;
+          origC = N - 1 - c;
+        } else if (player.rotationIndex === 3) {
+          origR = c;
+          origC = N - 1 - r;
+        }
+
+        const localC = origC - bounds.minC;
+        const localR = origR - bounds.minR;
+
+        const boardX = player.currentX + c;
+        const boardY = player.currentY + r;
+
+        const cellData = {
+          type: type,
+          rot: player.rotationIndex,
+          localC: localC,
+          localR: localR
+        };
+
+        drawBlock(ctx, cellData, boardX, boardY);
       }
     }
   }
@@ -573,20 +811,6 @@ function drawGhostPiece(player) {
   }
 }
 
-function drawActivePiece(player) {
-  if (!player.currentPiece || !player.ctx) return;
-  const ctx = player.ctx;
-
-  for (let r = 0; r < player.currentPiece.length; r++) {
-    for (let c = 0; c < player.currentPiece[r].length; c++) {
-      const type = player.currentPiece[r][c];
-      if (type !== 0) {
-        drawBlock(ctx, type, player.currentX + c, player.currentY + r);
-      }
-    }
-  }
-}
-
 function drawHoldPiece(player) {
   const ctx = player.holdCtx;
   if (!ctx) return;
@@ -594,15 +818,22 @@ function drawHoldPiece(player) {
 
   if (player.heldPieceId === null) return;
 
-  const piece = SHAPES[player.heldPieceId];
-  const offsetX = (player.holdCanvas.width / BLOCK_SIZE - piece[0].length) / 2;
-  const offsetY = (player.holdCanvas.height / BLOCK_SIZE - piece.length) / 2;
+  const type = player.heldPieceId;
+  const piece = ORIGINAL_SHAPES[type];
+  const bounds = getPieceBounds(piece);
+  const img = blockImagesLoaded[type];
 
-  for (let r = 0; r < piece.length; r++) {
-    for (let c = 0; c < piece[r].length; c++) {
-      const type = piece[r][c];
-      if (type !== 0) {
-        drawBlock(ctx, type, offsetX + c, offsetY + r);
+  const offsetX = (player.holdCanvas.width - bounds.cols * BLOCK_SIZE) / 2;
+  const offsetY = (player.holdCanvas.height - bounds.rows * BLOCK_SIZE) / 2;
+
+  if (img && img.complete && img.naturalWidth !== 0) {
+    ctx.drawImage(img, offsetX, offsetY, bounds.cols * BLOCK_SIZE, bounds.rows * BLOCK_SIZE);
+  } else {
+    for (let r = 0; r < piece.length; r++) {
+      for (let c = 0; c < piece[r].length; c++) {
+        if (piece[r][c] !== 0) {
+          drawBlock(ctx, type, (offsetX / BLOCK_SIZE) + c, (offsetY / BLOCK_SIZE) + r);
+        }
       }
     }
   }
@@ -615,15 +846,22 @@ function drawNextPiece(player) {
 
   if (player.nextPieceId === null) return;
 
-  const piece = SHAPES[player.nextPieceId];
-  const offsetX = (player.nextCanvas.width / BLOCK_SIZE - piece[0].length) / 2;
-  const offsetY = (player.nextCanvas.height / BLOCK_SIZE - piece.length) / 2;
+  const type = player.nextPieceId;
+  const piece = ORIGINAL_SHAPES[type];
+  const bounds = getPieceBounds(piece);
+  const img = blockImagesLoaded[type];
 
-  for (let r = 0; r < piece.length; r++) {
-    for (let c = 0; c < piece[r].length; c++) {
-      const type = piece[r][c];
-      if (type !== 0) {
-        drawBlock(ctx, type, offsetX + c, offsetY + r);
+  const offsetX = (player.nextCanvas.width - bounds.cols * BLOCK_SIZE) / 2;
+  const offsetY = (player.nextCanvas.height - bounds.rows * BLOCK_SIZE) / 2;
+
+  if (img && img.complete && img.naturalWidth !== 0) {
+    ctx.drawImage(img, offsetX, offsetY, bounds.cols * BLOCK_SIZE, bounds.rows * BLOCK_SIZE);
+  } else {
+    for (let r = 0; r < piece.length; r++) {
+      for (let c = 0; c < piece[r].length; c++) {
+        if (piece[r][c] !== 0) {
+          drawBlock(ctx, type, (offsetX / BLOCK_SIZE) + c, (offsetY / BLOCK_SIZE) + r);
+        }
       }
     }
   }
