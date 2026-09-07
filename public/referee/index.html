@@ -3,97 +3,296 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Tetris Referee Dashboard</title>
+  <title>Tetris Referee & Turnier Baum</title>
   <style>
-    body { font-family: system-ui, -apple-system, sans-serif; background: #111; color: #fff; padding: 20px; margin: 0; }
-    h1, h2 { color: #00f0f0; }
-    .card { background: #222; border: 1px solid #444; border-radius: 8px; padding: 20px; margin-bottom: 20px; }
-    button { padding: 10px 20px; font-size: 15px; margin-right: 10px; cursor: pointer; border: none; border-radius: 4px; transition: opacity 0.2s; }
+    body { font-family: system-ui, -apple-system, sans-serif; background: #0c0e14; color: #fff; padding: 20px; margin: 0; }
+    h1, h2, h3 { color: #00f0f0; margin-top: 0; }
+    .card { background: #181b26; border: 1px solid #333d5a; border-radius: 8px; padding: 20px; margin-bottom: 20px; }
+    .header-actions { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+    button { padding: 10px 18px; font-size: 14px; margin-right: 8px; cursor: pointer; border: none; border-radius: 4px; transition: all 0.2s; }
     button:hover { opacity: 0.85; }
     button:disabled { opacity: 0.3; cursor: not-allowed; }
     .btn-start { background: #00ff88; color: #000; font-weight: bold; }
     .btn-reset { background: #ff0055; color: #fff; font-weight: bold; }
-    .room-item { display: flex; justify-content: space-between; align-items: center; background: #333; padding: 12px; margin-top: 10px; border-radius: 6px; }
-    .status-badge { padding: 4px 8px; border-radius: 4px; font-size: 12px; text-transform: uppercase; font-weight: bold; }
-    .status-waiting { background: #ffaa00; color: #000; }
-    .status-running { background: #00ff88; color: #000; }
-    .status-finished { background: #777; color: #fff; }
-    code { font-family: monospace; font-size: 1.1em; color: #00f0f0; }
+
+    /* TOURNAMENT BRACKET STYLES */
+    .bracket-container { display: flex; gap: 30px; overflow-x: auto; padding: 10px 0; }
+    .bracket-round { display: flex; flex-direction: column; justify-content: space-around; min-width: 220px; }
+    .match-box { background: #232736; border: 2px solid #333d5a; border-radius: 6px; padding: 10px; margin: 10px 0; position: relative; }
+    .match-box.active { border-color: #00f0f0; box-shadow: 0 0 10px rgba(0, 240, 240, 0.3); }
+    .match-box.completed { border-color: #00ff88; }
+    .player-line { display: flex; justify-content: space-between; padding: 6px; border-radius: 4px; margin: 2px 0; background: #181b26; }
+    .player-line.winner { background: #005533; color: #00ff88; font-weight: bold; }
+    .btn-select-match { width: 100%; margin-top: 8px; background: #00aaff; color: #fff; font-weight: bold; }
   </style>
 </head>
 <body>
 
   <h1>🏆 Tetris Referee Dashboard</h1>
 
-  <!-- LOKALES MATCH -->
+  <!-- ONLINE RÄUME STEUERUNG -->
   <div class="card">
-    <h2>🎮 Lokales Match (Gleicher Browser)</h2>
-    <button class="btn-start" onclick="sendLocal('START_GAME')">▶ Lokal Starten</button>
-    <button class="btn-reset" onclick="sendLocal('RESET_GAME')">↺ Lokal Zurücksetzen</button>
+    <h2>🌐 Aktive Online-Räume (Socket.io)</h2>
+    <div id="online-rooms-list">Keine aktiven Online-Räume.</div>
   </div>
 
-  <!-- ONLINE RÄUME -->
+  <!-- LOKALES BRACKET STEUERUNG -->
   <div class="card">
-    <h2>🌐 Online Räume</h2>
-    <div id="room-list">Verbinde zum Server...</div>
+    <div class="header-actions">
+      <h2 style="margin: 0;">🎮 Turnier Baum (Lokale 2-Spieler Runden)</h2>
+      <button id="btn-reset-tournament" class="btn-reset" onclick="resetTournament()">🗑️ Turnier Zurücksetzen</button>
+    </div>
+    <div id="tournament-info" style="color: #aaa; margin-bottom: 15px;">Kein aktives Turnier geladen. Erstelle eines im Hauptmenü des Spiels.</div>
+    <div id="bracket-view" class="bracket-container"></div>
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
   <script>
-    const socket = io();
-    const channel = new BroadcastChannel('tetris_referee_channel');
+    // --- SOCKET.IO ONLINE RÄUME ---
+    const socket = typeof io !== 'undefined' ? io() : null;
 
-    function sendLocal(type) {
-      channel.postMessage({ type: type });
+    if (socket) {
+      socket.on('referee_room_list', (roomsList) => {
+        renderOnlineRooms(roomsList);
+      });
+      socket.emit('referee_get_rooms');
     }
 
     function startOnlineRoom(roomId) {
-      socket.emit('referee_start_room', { roomId });
+      if (socket) socket.emit('referee_start_room', { roomId });
     }
 
     function resetOnlineRoom(roomId) {
-      socket.emit('referee_reset_room', { roomId });
+      if (socket) socket.emit('referee_reset_room', { roomId });
     }
 
-    // Sobald die Verbindung steht, fordere die Räume an
-    socket.on('connect', () => {
-      socket.emit('referee_get_rooms');
-    });
-
-    // Raumliste empfangen
-    socket.on('referee_room_list', renderRooms);
-
-    function renderRooms(rooms) {
-      const container = document.getElementById('room-list');
+    function renderOnlineRooms(rooms) {
+      const container = document.getElementById('online-rooms-list');
       if (!rooms || rooms.length === 0) {
-        container.innerHTML = '<p style="color: #888;">Keine aktiven Online-Räume vorhanden.</p>';
+        container.innerHTML = '<p style="color: #aaa;">Keine aktiven Online-Räume vorhanden.</p>';
         return;
       }
 
-      container.innerHTML = rooms.map(room => {
-        let badgeClass = 'status-waiting';
-        if (room.status === 'running') badgeClass = 'status-running';
-        if (room.status === 'finished') badgeClass = 'status-finished';
+      container.innerHTML = '';
+      rooms.forEach(room => {
+        const roomBox = document.createElement('div');
+        roomBox.className = 'match-box';
+        roomBox.style.display = 'flex';
+        roomBox.style.justifyContent = 'space-between';
+        roomBox.style.alignItems = 'center';
 
-        return `
-          <div class="room-item">
-            <div>
-              <strong>Raum ID:</strong> <code>${room.id}</code> |
-              <strong>Spieler:</strong> ${room.playerCount}/2 |
-              <span class="status-badge ${badgeClass}">${room.status}</span>
-            </div>
-            <div>
-              <button class="btn-start" ${room.playerCount < 2 ? 'disabled' : ''} onclick="startOnlineRoom('${room.id}')">
-                ▶ Starten
-              </button>
-              <button class="btn-reset" onclick="resetOnlineRoom('${room.id}')">
-                ↺ Zurücksetzen
-              </button>
-            </div>
+        const canStart = room.playerCount === 2 && room.status !== 'running';
+
+        roomBox.innerHTML = `
+          <div>
+            <strong>Raum-ID: ${room.id}</strong> ${room.isTournament ? '🏆' : '🌐'}<br>
+            <span style="color: #aaa;">Spieler: ${room.playerCount}/2 | Status: ${room.status}</span>
+          </div>
+          <div>
+            <button class="btn-start" ${canStart ? '' : 'disabled'} onclick="startOnlineRoom('${room.id}')">▶ Starten</button>
+            <button class="btn-reset" onclick="resetOnlineRoom('${room.id}')">🔄 Reset</button>
           </div>
         `;
-      }).join('');
+        container.appendChild(roomBox);
+      });
     }
+
+    // --- LOKALES TURNIER BRACKET ---
+    const channel = new BroadcastChannel('tetris_referee_channel');
+    let currentTournament = null;
+
+    // Empfange Turniermeldungen und Spiel-Ergebnisse via BroadcastChannel
+    channel.onmessage = (event) => {
+      const { type, data } = event.data;
+
+      if (type === 'CREATE_TOURNAMENT') {
+        initTournament(data.players);
+      } else if (type === 'GAME_OVER_RESULT') {
+        handleGameOver(data.winnerName);
+      }
+    };
+
+    function initTournament(playerList) {
+      const rounds = [];
+      let currentRoundPlayers = [...playerList];
+
+      while (currentRoundPlayers.length > 1) {
+        const matches = [];
+        const nextRoundPlayers = [];
+
+        for (let i = 0; i < currentRoundPlayers.length; i += 2) {
+          const p1 = currentRoundPlayers[i];
+          const p2 = currentRoundPlayers[i + 1] || null;
+
+          if (p2 === null) {
+            // Freilos (BYE): p1 kommt automatisch weiter
+            matches.push({ p1: p1, p2: 'FREILOS', winner: p1, status: 'finished' });
+            nextRoundPlayers.push(p1);
+          } else {
+            matches.push({ p1: p1, p2: p2, winner: null, status: 'pending' });
+            nextRoundPlayers.push('???');
+          }
+        }
+        rounds.push(matches);
+        currentRoundPlayers = nextRoundPlayers;
+      }
+
+      currentTournament = {
+        rounds: rounds,
+        activeMatch: null
+      };
+
+      saveAndRender();
+    }
+
+    function saveAndRender() {
+      if (!currentTournament) return;
+      localStorage.setItem('tetris_referee_tournament', JSON.stringify(currentTournament));
+      renderBracket();
+    }
+
+    function loadTournament() {
+      const saved = localStorage.getItem('tetris_referee_tournament');
+      if (saved) {
+        currentTournament = JSON.parse(saved);
+        renderBracket();
+      }
+    }
+
+    function resetTournament() {
+      if (!currentTournament) {
+        alert('Es gibt kein aktives Turnier zum Zurücksetzen.');
+        return;
+      }
+
+      const confirmReset = confirm('Bist du sicher, dass du das aktuelle Turnier löschen möchtest? Alle Fortschritte gehen verloren.');
+      if (confirmReset) {
+        currentTournament = null;
+        localStorage.removeItem('tetris_referee_tournament');
+        localStorage.removeItem('tetris_pending_tournament');
+        renderBracket();
+      }
+    }
+
+    function checkPendingTournament() {
+      const pending = localStorage.getItem('tetris_pending_tournament');
+      if (pending) {
+        try {
+          const data = JSON.parse(pending);
+          if (data.players && data.players.length >= 2) {
+            initTournament(data.players);
+          }
+        } catch (e) {
+          console.error('Fehler beim Parsen des ausstehenden Turniers:', e);
+        }
+        localStorage.removeItem('tetris_pending_tournament');
+      }
+    }
+
+    function selectAndStartMatch(rIndex, mIndex) {
+      const match = currentTournament.rounds[rIndex][mIndex];
+      if (!match.p1 || !match.p2 || match.p1 === '???' || match.p2 === '???') {
+        return alert('Dieses Match ist noch nicht bereit!');
+      }
+
+      currentTournament.activeMatch = { rIndex, mIndex };
+      match.status = 'running';
+
+      channel.postMessage({
+        type: 'START_TOURNAMENT_MATCH',
+        data: {
+          p1Name: match.p1,
+          p2Name: match.p2
+        }
+      });
+
+      saveAndRender();
+    }
+
+    function handleGameOver(winnerName) {
+      if (!currentTournament || !currentTournament.activeMatch) return;
+
+      const { rIndex, mIndex } = currentTournament.activeMatch;
+      const match = currentTournament.rounds[rIndex][mIndex];
+
+      match.winner = winnerName;
+      match.status = 'finished';
+
+      // Gewinner in die nächste Runde eintragen
+      if (rIndex + 1 < currentTournament.rounds.length) {
+        const nextMatchIndex = Math.floor(mIndex / 2);
+        const isP1 = mIndex % 2 === 0;
+        const nextMatch = currentTournament.rounds[rIndex + 1][nextMatchIndex];
+
+        if (isP1) nextMatch.p1 = winnerName;
+        else nextMatch.p2 = winnerName;
+      }
+
+      currentTournament.activeMatch = null;
+      saveAndRender();
+    }
+
+    function renderBracket() {
+      const container = document.getElementById('bracket-view');
+      const infoEl = document.getElementById('tournament-info');
+
+      if (!currentTournament) {
+        infoEl.innerText = 'Kein aktives Turnier geladen. Erstelle eines im Hauptmenü des Spiels.';
+        container.innerHTML = '';
+        return;
+      }
+
+      infoEl.innerText = `Turnier aktiv. Wähle ein Match aus, um es auf dem Spielbildschirm zu starten.`;
+      container.innerHTML = '';
+
+      const roundNames = ['Achtelfinale', 'Viertelfinale', 'Halbfinale', 'Finale'];
+      const totalRounds = currentTournament.rounds.length;
+
+      currentTournament.rounds.forEach((round, rIndex) => {
+        const roundEl = document.createElement('div');
+        roundEl.className = 'bracket-round';
+
+        const rTitle = document.createElement('h3');
+        rTitle.innerText = roundNames[4 - totalRounds + rIndex] || `Runde ${rIndex + 1}`;
+        roundEl.appendChild(rTitle);
+
+        round.forEach((match, mIndex) => {
+          const matchBox = document.createElement('div');
+          matchBox.className = `match-box ${match.status}`;
+
+          const p1Win = match.winner === match.p1 && match.p1 !== null;
+          const p2Win = match.winner === match.p2 && match.p2 !== null;
+
+          matchBox.innerHTML = `
+            <div class="player-line ${p1Win ? 'winner' : ''}">
+              <span>${match.p1 || '???'}</span>
+              ${p1Win ? '👑' : ''}
+            </div>
+            <div class="player-line ${p2Win ? 'winner' : ''}">
+              <span>${match.p2 || '???'}</span>
+              ${p2Win ? '👑' : ''}
+            </div>
+          `;
+
+          if (match.status !== 'finished') {
+            const btn = document.createElement('button');
+            btn.className = 'btn-select-match';
+            btn.innerText = match.status === 'running' ? '▶ Match Läuft...' : '▶ Match Starten';
+            btn.disabled = match.status === 'running' || match.p1 === '???' || match.p2 === '???';
+            btn.onclick = () => selectAndStartMatch(rIndex, mIndex);
+            matchBox.appendChild(btn);
+          }
+
+          roundEl.appendChild(matchBox);
+        });
+
+        container.appendChild(roundEl);
+      });
+    }
+
+    // Beim Laden zuerst ein eventuell gespeichertes Turnier laden und auf ausstehende Erstellungen prüfen
+    loadTournament();
+    checkPendingTournament();
   </script>
 </body>
 </html>

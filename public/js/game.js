@@ -4,9 +4,8 @@ const COLS = 10;
 const ROWS = 20;
 const BLOCK_SIZE = 24;
 
-let gameMode = null; // 'solo', 'endless', 'local' oder 'online'
+let gameMode = null; // 'solo', 'endless', 'tournament_local' oder 'online'
 let currentRoomId = null;
-let myOnlineIndex = 1;
 
 // SOLO LEVEL & SCORE SYSTEM
 let score = 0;
@@ -15,16 +14,8 @@ let maxUnlockedLevel = parseInt(localStorage.getItem('tetris_unlocked_level')) |
 const TARGET_SCORE = 10000;
 
 const LEVEL_SPEEDS = {
-  1: 800,
-  2: 700,
-  3: 600,
-  4: 500,
-  5: 420,
-  6: 350,
-  7: 280,
-  8: 220,
-  9: 170,
-  10: 120
+  1: 800, 2: 700, 3: 600, 4: 500, 5: 420,
+  6: 350, 7: 280, 8: 220, 9: 170, 10: 120
 };
 
 let dropInterval = LEVEL_SPEEDS[1];
@@ -35,9 +26,7 @@ bgm.loop = true;
 bgm.volume = parseFloat(localStorage.getItem('tetris_bgm_volume')) || 0.3;
 
 function playBGM() {
-  bgm.play().catch(() => {
-    console.log('Autoplay blockiert – Musik wartet auf Interaktion.');
-  });
+  bgm.play().catch(() => console.log('Autoplay blockiert.'));
 }
 
 function stopBGM() {
@@ -65,7 +54,6 @@ BLOCK_IMAGE_SOURCES.forEach((src, index) => {
   blockImagesLoaded[index] = img;
 });
 
-// BASE SHAPES
 const ORIGINAL_SHAPES = [
   [],
 [[0,0,0,0],[1,1,1,1],[0,0,0,0],[0,0,0,0]], // I
@@ -91,7 +79,7 @@ const defaultControls = {
     left: { type: 'key', code: 'ArrowLeft' },
     right: { type: 'key', code: 'ArrowRight' },
     down: { type: 'key', code: 'ArrowDown' },
-    drop: { type: 'key', code: 'ArrowDown' },
+    drop: { type: 'key', code: 'ArrowUp' },
     rotLeft: { type: 'key', code: 'KeyN' },
     rotRight: { type: 'key', code: 'KeyM' },
     hold: { type: 'key', code: 'ShiftRight' }
@@ -106,19 +94,94 @@ let countdownTimer = null;
 let lastTime = 0;
 let listeningButton = null;
 
+let player1Name = 'Spieler 1';
+let player2Name = 'Spieler 2';
+
 const prevGamepadState = {};
 const gamepadRepeatTimers = {};
 
 const channel = new BroadcastChannel('tetris_referee_channel');
 
+// VOM REFEREE EMPFANGEN
+// VOM REFEREE EMPFANGEN
 channel.onmessage = (event) => {
-  if (gameMode === 'local' || gameMode === 'solo' || gameMode === 'endless') {
-    if (event.data.type === 'START_GAME') startCountdown();
-    else if (event.data.type === 'RESET_GAME') resetGame();
+  if (event.data.type === 'START_TOURNAMENT_MATCH') {
+    gameMode = 'tournament_local';
+
+    const data = event.data.data;
+    player1Name = data.p1Name || 'Spieler 1';
+    player2Name = data.p2Name || 'Spieler 2';
+
+    document.getElementById('mode-selection').classList.add('hidden');
+    document.getElementById('tournament-selection').classList.add('hidden');
+    document.getElementById('game-wrapper').classList.remove('hidden');
+
+    document.getElementById('player-2-area').classList.remove('hidden');
+    document.getElementById('p2-controls-col').style.display = 'block';
+
+    initGame();
+
+    const p1Title = document.getElementById('p1-title');
+    const p2Title = document.getElementById('p2-title');
+    if (p1Title) p1Title.innerText = player1Name;
+    if (p2Title) p2Title.innerText = player2Name;
+
+    startCountdown();
   }
 };
 
-document.getElementById('btn-solo-mode').addEventListener('click', () => {
+// TURNIER DYNAMISCHE INPUTS
+const sizeSelect = document.getElementById('tournament-size-select');
+const namesContainer = document.getElementById('player-names-inputs');
+
+function generateNameInputs() {
+  if (!namesContainer) return;
+  const count = parseInt(sizeSelect.value);
+  namesContainer.innerHTML = '';
+
+  for (let i = 1; i <= count; i++) {
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.placeholder = `Spieler ${i}`;
+    input.value = `Spieler ${i}`;
+    input.className = 'tournament-player-input';
+    input.style.cssText = 'padding: 8px; border-radius: 4px; border: 1px solid #333d5a; background: #181b26; color: #fff; text-align: center;';
+    namesContainer.appendChild(input);
+  }
+}
+
+sizeSelect?.addEventListener('change', generateNameInputs);
+
+document.getElementById('btn-tournament-mode')?.addEventListener('click', () => {
+  document.getElementById('mode-selection').classList.add('hidden');
+  document.getElementById('tournament-selection').classList.remove('hidden');
+  generateNameInputs();
+});
+
+document.getElementById('btn-tournament-back')?.addEventListener('click', () => {
+  document.getElementById('tournament-selection').classList.add('hidden');
+  document.getElementById('mode-selection').classList.remove('hidden');
+});
+
+document.getElementById('btn-start-tournament-creation')?.addEventListener('click', () => {
+  const inputs = document.querySelectorAll('.tournament-player-input');
+  const players = Array.from(inputs).map((inp, idx) => inp.value.trim() || `Spieler ${idx + 1}`);
+
+  const payload = { players }
+
+  localStorage.setItem('tetris_pending_tournament', JSON.stringify(payload));
+
+  channel.postMessage({
+    type: 'CREATE_TOURNAMENT',
+    data: payload
+  });
+
+  alert('Turnier-Baum wurde im Referee-Dashboard erstellt! Starte die Matches von dort.');
+  document.getElementById('tournament-selection').classList.add('hidden');
+  document.getElementById('mode-selection').classList.remove('hidden');
+});
+
+document.getElementById('btn-solo-mode')?.addEventListener('click', () => {
   document.getElementById('mode-selection').classList.add('hidden');
   renderSoloLevelSelection();
 });
@@ -128,20 +191,9 @@ document.getElementById('btn-back-to-menu')?.addEventListener('click', () => {
   document.getElementById('mode-selection').classList.remove('hidden');
 });
 
-document.getElementById('btn-local-mode').addEventListener('click', () => {
-  gameMode = 'local';
-  setupGameUI();
-});
-
-document.getElementById('btn-online-mode').addEventListener('click', () => {
-  gameMode = 'online';
-  if (socket) socket.emit('find_match');
-});
-
 function renderSoloLevelSelection() {
   const container = document.getElementById('level-buttons-container');
   const endlessBtn = document.getElementById('btn-endless-mode');
-
   if (!container) return;
 
   container.innerHTML = '';
@@ -163,9 +215,7 @@ function renderSoloLevelSelection() {
     btn.style.fontSize = '1.1rem';
     btn.style.cursor = 'pointer';
 
-    const isUnlocked = lvl <= maxUnlockedLevel;
-
-    if (isUnlocked) {
+    if (lvl <= maxUnlockedLevel) {
       btn.innerText = `Lvl ${lvl}\n⚡ ${LEVEL_SPEEDS[lvl]}ms`;
       btn.style.backgroundColor = '#00f0f0';
       btn.style.color = '#000';
@@ -184,7 +234,6 @@ function renderSoloLevelSelection() {
       btn.style.color = '#888';
       btn.disabled = true;
     }
-
     container.appendChild(btn);
   }
 }
@@ -198,67 +247,8 @@ function setupGameUI() {
     document.getElementById('p2-controls-col').style.display = 'none';
     document.getElementById('room-display').classList.add('hidden');
     document.getElementById('score-display').classList.remove('hidden');
-    document.getElementById('p1-title').innerText = gameMode === 'endless' ? 'Endlos Modus' : `Solo - Level ${level}`;
-  } else if (gameMode === 'local') {
-    document.getElementById('player-2-area').classList.remove('hidden');
-    document.getElementById('p2-controls-col').style.display = 'block';
-    document.getElementById('room-display').classList.add('hidden');
-    document.getElementById('score-display').classList.add('hidden');
-    document.getElementById('p1-title').innerText = 'Spieler 1';
   }
   initGame();
-}
-
-if (socket) {
-  socket.on('init_player', ({ playerIndex, roomId }) => {
-    myOnlineIndex = playerIndex;
-    currentRoomId = roomId;
-    document.getElementById('mode-selection').classList.add('hidden');
-    document.getElementById('game-wrapper').classList.remove('hidden');
-    document.getElementById('player-2-area').classList.add('hidden');
-    document.getElementById('p2-controls-col').style.display = 'none';
-    document.getElementById('score-display').classList.add('hidden');
-
-    const roomDisplay = document.getElementById('room-display');
-    roomDisplay.innerText = `Raum: ${roomId}`;
-    roomDisplay.classList.remove('hidden');
-
-    document.getElementById('p1-title').innerText = `Du (Spieler ${playerIndex})`;
-    document.getElementById('status').innerText = 'Warte auf Mitspieler...';
-    initGame();
-  });
-
-  socket.on('player_status_update', ({ playerCount, readyToStart }) => {
-    const statusEl = document.getElementById('status');
-    if (playerCount < 2) {
-      statusEl.innerText = 'Warte auf zweiten Spieler...';
-      statusEl.style.color = '#ffaa00';
-    } else if (readyToStart && !gameActive && !isCountingDown) {
-      statusEl.innerText = 'Raum voll – Warte auf Start durch Referee...';
-      statusEl.style.color = '#00f0f0';
-    }
-  });
-
-  socket.on('referee_start_game', () => startCountdown());
-  socket.on('referee_reset_game', () => resetGame());
-
-  socket.on('receive_garbage', ({ lines }) => {
-    if (gameActive && players[0]) sendGarbage(players[0], lines);
-  });
-
-    socket.on('opponent_game_over', () => {
-      gameActive = false;
-      stopBGM();
-      document.getElementById('status').innerText = '🏆 GEGNER HAT VERLOREN – DU GEWINNST!';
-      document.getElementById('status').style.color = '#00ff88';
-    });
-
-    socket.on('opponent_disconnected', () => {
-      gameActive = false;
-      stopBGM();
-      document.getElementById('status').innerText = '❌ Gegner hat die Verbindung getrennt.';
-      document.getElementById('status').style.color = '#ff0055';
-    });
 }
 
 function getRandomPieceId() {
@@ -291,18 +281,30 @@ let players = [];
 
 function initGame() {
   score = 0;
-  if (gameMode === 'solo') {
-    dropInterval = LEVEL_SPEEDS[level] || 800;
-  } else {
-    dropInterval = 800;
-  }
+  dropInterval = gameMode === 'solo' ? (LEVEL_SPEEDS[level] || 800) : 800;
   updateScoreUI();
 
-  if (gameMode === 'local') {
+  if (gameMode === 'tournament_local') {
     players = [createPlayer(1), createPlayer(2)];
   } else {
+    // Nur überschreiben, wenn wir NICHT im Turnier sind!
+    player1Name = 'Spieler 1';
+    player2Name = 'Spieler 2';
     players = [createPlayer(1)];
   }
+
+  // Titel-UI aktualisieren
+  const p1Title = document.getElementById('p1-title');
+  const p2Title = document.getElementById('p2-title');
+  if (p1Title) {
+    p1Title.innerText = (gameMode === 'endless')
+    ? 'Endlos Modus'
+    : (gameMode === 'solo' ? `Solo - Level ${level}` : player1Name);
+  }
+  if (p2Title) {
+    p2Title.innerText = player2Name;
+  }
+
   draw();
 }
 
@@ -310,22 +312,8 @@ function updateScoreUI() {
   const scoreVal = document.getElementById('score-val');
   const levelVal = document.getElementById('level-val');
 
-  if (scoreVal) {
-    if (gameMode === 'endless') {
-      scoreVal.innerText = `${score} (Endlos)`;
-    } else {
-      scoreVal.innerText = `${score} / ${TARGET_SCORE}`;
-    }
-  }
-
-  if (levelVal) {
-    if (gameMode === 'endless') {
-      const currentEndlessLevel = Math.floor(score / 1000) + 1;
-      levelVal.innerText = `Endlos (Lvl ${currentEndlessLevel})`;
-    } else {
-      levelVal.innerText = level;
-    }
-  }
+  if (scoreVal) scoreVal.innerText = gameMode === 'endless' ? `${score} (Endlos)` : `${score} / ${TARGET_SCORE}`;
+  if (levelVal) levelVal.innerText = gameMode === 'endless' ? `Endlos` : level;
 }
 
 function createGrid() {
@@ -337,12 +325,14 @@ function startCountdown() {
 
   stopBGM();
   score = 0;
-  if (gameMode === 'solo') {
-    dropInterval = LEVEL_SPEEDS[level] || 800;
-  } else {
-    dropInterval = 800;
-  }
+  dropInterval = gameMode === 'solo' ? (LEVEL_SPEEDS[level] || 800) : 800;
   updateScoreUI();
+
+  // Namen-UI absichern
+  const p1Title = document.getElementById('p1-title');
+  const p2Title = document.getElementById('p2-title');
+  if (p1Title && gameMode === 'tournament_local') p1Title.innerText = player1Name;
+  if (p2Title && gameMode === 'tournament_local') p2Title.innerText = player2Name;
 
   players.forEach(p => {
     p.grid = createGrid();
@@ -381,20 +371,6 @@ function startCountdown() {
   }, 1000);
 }
 
-function resetGame() {
-  if (countdownTimer) {
-    clearInterval(countdownTimer);
-    countdownTimer = null;
-  }
-  isCountingDown = false;
-  gameActive = false;
-  stopBGM();
-  initGame();
-
-  document.getElementById('status').innerText = 'Warte auf Freigabe...';
-  document.getElementById('status').style.color = '#ffaa00';
-}
-
 function spawnPiece(player, specificId = null) {
   if (specificId !== null) {
     player.currentPieceId = specificId;
@@ -413,18 +389,23 @@ function spawnPiece(player, specificId = null) {
     gameActive = false;
     stopBGM();
 
-    if (gameMode === 'solo') {
-      document.getElementById('status').innerText = `💥 GAME OVER – SCORE: ${score}/${TARGET_SCORE}`;
-    } else if (gameMode === 'endless') {
-      document.getElementById('status').innerText = `💥 GAME OVER – ENDSCORE: ${score} PUNKTE!`;
-    } else if (gameMode === 'local') {
-      const winnerId = player.id === 1 ? 2 : 1;
-      document.getElementById('status').innerText = `🏆 GAME OVER – SPIELER ${winnerId} GEWINNT!`;
+    const statusEl = document.getElementById('status');
+    statusEl.style.color = '#ff0055';
+
+    if (gameMode === 'tournament_local') {
+      // Wenn Player 1 (ID 1) verliert, gewinnt Player 2 (player2Name)
+      const winnerName = (player.id === 1) ? player2Name : player1Name;
+
+      statusEl.innerText = `💥 GAME OVER – ${winnerName} GEWINNT!`;
+
+      // Sendet den exakten Gewinnernamen an das Referee-Dashboard
+      channel.postMessage({
+        type: 'GAME_OVER_RESULT',
+        data: { winnerName: winnerName }
+      });
     } else {
-      document.getElementById('status').innerText = `💥 GAME OVER – DU HAST VERLOREN!`;
-      if (socket) socket.emit('game_over', { roomId: currentRoomId });
+      statusEl.innerText = `💥 GAME OVER`;
     }
-    document.getElementById('status').style.color = '#ff0055';
   }
 }
 
@@ -471,12 +452,7 @@ function getPieceBounds(piece) {
     }
   }
 
-  return {
-    minR, maxR,
-    minC, maxC,
-    rows: maxR - minR + 1,
-    cols: maxC - minC + 1
-  };
+  return { minR, maxR, minC, maxC, rows: maxR - minR + 1, cols: maxC - minC + 1 };
 }
 
 function mergePiece(player) {
@@ -489,37 +465,23 @@ function mergePiece(player) {
   for (let r = 0; r < N; r++) {
     for (let c = 0; c < N; c++) {
       if (piece[r][c] !== 0) {
-        let origR = r;
-        let origC = c;
+        let origR = r, origC = c;
 
-        // Rückrechnung der Rotationen für das Original-Quellbild
-        if (player.rotationIndex === 1) {
-          origR = N - 1 - c;
-          origC = r;
-        } else if (player.rotationIndex === 2) {
-          origR = N - 1 - r;
-          origC = N - 1 - c;
-        } else if (player.rotationIndex === 3) {
-          origR = c;
-          origC = N - 1 - r;
-        }
-
-        const localC = origC - bounds.minC;
-        const localR = origR - bounds.minR;
+        if (player.rotationIndex === 1) { origR = N - 1 - c; origC = r; }
+        else if (player.rotationIndex === 2) { origR = N - 1 - r; origC = N - 1 - c; }
+        else if (player.rotationIndex === 3) { origR = c; origC = N - 1 - r; }
 
         player.grid[player.currentY + r][player.currentX + c] = {
           type: type,
           rot: player.rotationIndex,
-          localC: localC,
-          localR: localR
+          localC: origC - bounds.minC,
+          localR: origR - bounds.minR
         };
       }
     }
   }
   clearLines(player);
-  if (gameActive) {
-    spawnPiece(player);
-  }
+  if (gameActive) spawnPiece(player);
 }
 
 function clearLines(player) {
@@ -535,49 +497,16 @@ function clearLines(player) {
   }
 
   if (clearedLines > 0) {
-    if (gameMode === 'solo' || gameMode === 'endless') {
+    if (gameMode === 'tournament_local') {
+      if (clearedLines >= 2) {
+        const garbageLines = clearedLines === 2 ? 1 : (clearedLines === 3 ? 2 : 4);
+        const opponent = players.find(p => p.id !== player.id);
+        if (opponent) sendGarbage(opponent, garbageLines);
+      }
+    } else if (gameMode === 'solo' || gameMode === 'endless') {
       const pointsTable = [0, 100, 300, 500, 800];
       score += pointsTable[clearedLines] || (clearedLines * 200);
-
-      if (gameMode === 'endless') {
-        const speedMultiplier = Math.floor(score / 1000);
-        dropInterval = Math.max(50, 800 - (speedMultiplier * 40));
-      }
-
       updateScoreUI();
-
-      if (gameMode === 'solo' && score >= TARGET_SCORE) {
-        gameActive = false;
-        stopBGM();
-
-        const statusEl = document.getElementById('status');
-        statusEl.innerText = `🎉 LEVEL ${level} GESCHAFFT! KEHRE INS MENÜ ZURÜCK...`;
-        statusEl.style.color = '#00ff88';
-
-        if (level >= maxUnlockedLevel) {
-          maxUnlockedLevel = level + 1;
-          localStorage.setItem('tetris_unlocked_level', maxUnlockedLevel);
-        }
-
-        setTimeout(() => {
-          document.getElementById('game-wrapper').classList.add('hidden');
-          renderSoloLevelSelection();
-        }, 2000);
-      }
-    } else {
-      if (clearedLines >= 2) {
-        let garbageToSend = 0;
-        if (clearedLines === 2) garbageToSend = 1;
-        else if (clearedLines === 3) garbageToSend = 2;
-        else if (clearedLines >= 4) garbageToSend = 4;
-
-        if (gameMode === 'local') {
-          const targetPlayer = players.find(p => p.id !== player.id);
-          sendGarbage(targetPlayer, garbageToSend);
-        } else {
-          if (socket) socket.emit('send_garbage', { roomId: currentRoomId, lines: garbageToSend });
-        }
-      }
     }
   }
 }
@@ -586,8 +515,7 @@ function sendGarbage(targetPlayer, lines) {
   for (let i = 0; i < lines; i++) {
     targetPlayer.grid.shift();
     const garbageRow = Array(COLS).fill(8);
-    const holeIndex = Math.floor(Math.random() * COLS);
-    garbageRow[holeIndex] = 0;
+    garbageRow[Math.floor(Math.random() * COLS)] = 0;
     targetPlayer.grid.push(garbageRow);
   }
 
@@ -596,13 +524,8 @@ function sendGarbage(targetPlayer, lines) {
   }
 }
 
-function rotateClockwise(piece) {
-  return piece[0].map((_, i) => piece.map(row => row[i]).reverse());
-}
-
-function rotateCounterClockwise(piece) {
-  return piece[0].map((_, i) => piece.map(row => row[row.length - 1 - i]));
-}
+function rotateClockwise(piece) { return piece[0].map((_, i) => piece.map(row => row[i]).reverse()); }
+function rotateCounterClockwise(piece) { return piece[0].map((_, i) => piece.map(row => row[row.length - 1 - i])); }
 
 function attemptRotation(player, dir) {
   const rotated = dir === 'left' ? rotateCounterClockwise(player.currentPiece) : rotateClockwise(player.currentPiece);
@@ -639,21 +562,13 @@ function handleAction(playerIndex, action) {
   const p = players[playerIndex];
   if (!p || !p.currentPiece) return;
 
-  if (action === 'left') {
-    if (!collide(p.grid, p.currentPiece, p.currentX - 1, p.currentY)) p.currentX--;
-  } else if (action === 'right') {
-    if (!collide(p.grid, p.currentPiece, p.currentX + 1, p.currentY)) p.currentX++;
-  } else if (action === 'down') {
-    moveDown(p);
-  } else if (action === 'drop') {
-    hardDrop(p);
-  } else if (action === 'rotLeft') {
-    attemptRotation(p, 'left');
-  } else if (action === 'rotRight') {
-    attemptRotation(p, 'right');
-  } else if (action === 'hold') {
-    holdPiece(p);
-  }
+  if (action === 'left') { if (!collide(p.grid, p.currentPiece, p.currentX - 1, p.currentY)) p.currentX--; }
+  else if (action === 'right') { if (!collide(p.grid, p.currentPiece, p.currentX + 1, p.currentY)) p.currentX++; }
+  else if (action === 'down') moveDown(p);
+  else if (action === 'drop') hardDrop(p);
+  else if (action === 'rotLeft') attemptRotation(p, 'left');
+  else if (action === 'rotRight') attemptRotation(p, 'right');
+  else if (action === 'hold') holdPiece(p);
 }
 
 function mainLoop(time = 0) {
@@ -665,11 +580,9 @@ function mainLoop(time = 0) {
   if (gameActive) {
     players.forEach(p => {
       p.dropCounter += deltaTime;
-      if (p.dropCounter > dropInterval) {
-        moveDown(p);
-      }
+      if (p.dropCounter > dropInterval) moveDown(p);
     });
-    draw();
+      draw();
   }
 
   requestAnimationFrame(mainLoop);
@@ -689,7 +602,6 @@ function drawBlock(ctx, cellData, x, y) {
   if (!ctx || !cellData) return;
   const px = x * BLOCK_SIZE;
   const py = y * BLOCK_SIZE;
-
   const type = typeof cellData === 'object' ? cellData.type : cellData;
   const img = blockImagesLoaded[type];
 
@@ -698,24 +610,13 @@ function drawBlock(ctx, cellData, x, y) {
     const baseShape = ORIGINAL_SHAPES[type];
     const bounds = getPieceBounds(baseShape);
 
-    // Bildausschnitt der ungedrehten Grundform
     const sourceX = (localC / bounds.cols) * img.naturalWidth;
     const sourceY = (localR / bounds.rows) * img.naturalHeight;
-    const sourceW = img.naturalWidth / bounds.cols;
-    const sourceH = img.naturalHeight / bounds.rows;
 
     ctx.save();
     ctx.translate(px + BLOCK_SIZE / 2, py + BLOCK_SIZE / 2);
-
-    // Drehung um die eigene Achse für den jeweiligen Sub-Block
     ctx.rotate((rot * 90 * Math.PI) / 180);
-
-    ctx.drawImage(
-      img,
-      sourceX, sourceY, sourceW, sourceH,
-      -BLOCK_SIZE / 2, -BLOCK_SIZE / 2, BLOCK_SIZE, BLOCK_SIZE
-    );
-
+    ctx.drawImage(img, sourceX, sourceY, img.naturalWidth / bounds.cols, img.naturalHeight / bounds.rows, -BLOCK_SIZE / 2, -BLOCK_SIZE / 2, BLOCK_SIZE, BLOCK_SIZE);
     ctx.restore();
   } else {
     ctx.fillStyle = COLORS[type] || '#777';
@@ -732,17 +633,13 @@ function drawBoard(player) {
 
   for (let r = 0; r < ROWS; r++) {
     for (let c = 0; c < COLS; c++) {
-      const cell = player.grid[r][c];
-      if (cell !== 0) {
-        drawBlock(ctx, cell, c, r);
-      }
+      if (player.grid[r][c] !== 0) drawBlock(ctx, player.grid[r][c], c, r);
     }
   }
 }
 
 function drawActivePiece(player) {
   if (!player.currentPiece || !player.ctx) return;
-
   const ctx = player.ctx;
   const type = player.currentPieceId;
   const baseShape = ORIGINAL_SHAPES[type];
@@ -752,34 +649,17 @@ function drawActivePiece(player) {
   for (let r = 0; r < N; r++) {
     for (let c = 0; c < N; c++) {
       if (player.currentPiece[r][c] !== 0) {
-        let origR = r;
-        let origC = c;
+        let origR = r, origC = c;
+        if (player.rotationIndex === 1) { origR = N - 1 - c; origC = r; }
+        else if (player.rotationIndex === 2) { origR = N - 1 - r; origC = N - 1 - c; }
+        else if (player.rotationIndex === 3) { origR = c; origC = N - 1 - r; }
 
-        if (player.rotationIndex === 1) {
-          origR = N - 1 - c;
-          origC = r;
-        } else if (player.rotationIndex === 2) {
-          origR = N - 1 - r;
-          origC = N - 1 - c;
-        } else if (player.rotationIndex === 3) {
-          origR = c;
-          origC = N - 1 - r;
-        }
-
-        const localC = origC - bounds.minC;
-        const localR = origR - bounds.minR;
-
-        const boardX = player.currentX + c;
-        const boardY = player.currentY + r;
-
-        const cellData = {
+        drawBlock(ctx, {
           type: type,
           rot: player.rotationIndex,
-          localC: localC,
-          localR: localR
-        };
-
-        drawBlock(ctx, cellData, boardX, boardY);
+          localC: origC - bounds.minC,
+          localR: origR - bounds.minR
+        }, player.currentX + c, player.currentY + r);
       }
     }
   }
@@ -789,10 +669,7 @@ function drawGhostPiece(player) {
   if (!player.currentPiece || !player.ctx) return;
 
   let ghostY = player.currentY;
-  while (!collide(player.grid, player.currentPiece, player.currentX, ghostY + 1)) {
-    ghostY++;
-  }
-
+  while (!collide(player.grid, player.currentPiece, player.currentX, ghostY + 1)) ghostY++;
   if (ghostY === player.currentY) return;
 
   const ctx = player.ctx;
@@ -802,10 +679,8 @@ function drawGhostPiece(player) {
   for (let r = 0; r < player.currentPiece.length; r++) {
     for (let c = 0; c < player.currentPiece[r].length; c++) {
       if (player.currentPiece[r][c] !== 0) {
-        const px = (player.currentX + c) * BLOCK_SIZE;
-        const py = (ghostY + r) * BLOCK_SIZE;
-        ctx.fillRect(px, py, BLOCK_SIZE, BLOCK_SIZE);
-        ctx.strokeRect(px, py, BLOCK_SIZE, BLOCK_SIZE);
+        ctx.fillRect((player.currentX + c) * BLOCK_SIZE, (ghostY + r) * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+        ctx.strokeRect((player.currentX + c) * BLOCK_SIZE, (ghostY + r) * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
       }
     }
   }
@@ -815,7 +690,6 @@ function drawHoldPiece(player) {
   const ctx = player.holdCtx;
   if (!ctx) return;
   ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-
   if (player.heldPieceId === null) return;
 
   const type = player.heldPieceId;
@@ -828,14 +702,6 @@ function drawHoldPiece(player) {
 
   if (img && img.complete && img.naturalWidth !== 0) {
     ctx.drawImage(img, offsetX, offsetY, bounds.cols * BLOCK_SIZE, bounds.rows * BLOCK_SIZE);
-  } else {
-    for (let r = 0; r < piece.length; r++) {
-      for (let c = 0; c < piece[r].length; c++) {
-        if (piece[r][c] !== 0) {
-          drawBlock(ctx, type, (offsetX / BLOCK_SIZE) + c, (offsetY / BLOCK_SIZE) + r);
-        }
-      }
-    }
   }
 }
 
@@ -843,7 +709,6 @@ function drawNextPiece(player) {
   const ctx = player.nextCtx;
   if (!ctx) return;
   ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-
   if (player.nextPieceId === null) return;
 
   const type = player.nextPieceId;
@@ -856,18 +721,10 @@ function drawNextPiece(player) {
 
   if (img && img.complete && img.naturalWidth !== 0) {
     ctx.drawImage(img, offsetX, offsetY, bounds.cols * BLOCK_SIZE, bounds.rows * BLOCK_SIZE);
-  } else {
-    for (let r = 0; r < piece.length; r++) {
-      for (let c = 0; c < piece[r].length; c++) {
-        if (piece[r][c] !== 0) {
-          drawBlock(ctx, type, (offsetX / BLOCK_SIZE) + c, (offsetY / BLOCK_SIZE) + r);
-        }
-      }
-    }
   }
 }
 
-// TASTATUR INPUT
+// TASTATUR STEUERUNG
 document.addEventListener('keydown', (e) => {
   if (listeningButton) {
     e.preventDefault();
@@ -885,7 +742,7 @@ document.addEventListener('keydown', (e) => {
 
   if (!gameActive) return;
 
-  const activeKeys = gameMode === 'local' ? ['p1', 'p2'] : ['p1'];
+  const activeKeys = gameMode === 'tournament_local' ? ['p1', 'p2'] : ['p1'];
 
   activeKeys.forEach((pKey, index) => {
     Object.keys(controls[pKey]).forEach(action => {
@@ -895,14 +752,6 @@ document.addEventListener('keydown', (e) => {
       }
     });
   });
-});
-
-window.addEventListener('gamepadconnected', (e) => {
-  console.log('Gamepad verbunden:', e.gamepad.id);
-});
-
-window.addEventListener('gamepaddisconnected', (e) => {
-  console.log('Gamepad getrennt:', e.gamepad.id);
 });
 
 function pollGamepads(deltaTime) {
@@ -921,15 +770,8 @@ function pollGamepads(deltaTime) {
           return;
         }
       }
-      for (let aIndex = 0; aIndex < gp.axes.length; aIndex++) {
-        if (Math.abs(gp.axes[aIndex]) > 0.6) {
-          const dir = gp.axes[aIndex] > 0 ? 1 : -1;
-          bindGamepadInput(listeningButton, { type: 'padAxis', padIndex: gp.index, axisIndex: aIndex, direction: dir });
-          return;
-        }
-      }
     } else if (gameActive) {
-      const activeKeys = gameMode === 'local' ? ['p1', 'p2'] : ['p1'];
+      const activeKeys = gameMode === 'tournament_local' ? ['p1', 'p2'] : ['p1'];
 
       activeKeys.forEach((pKey, pIdx) => {
         Object.keys(controls[pKey]).forEach(action => {
@@ -937,12 +779,8 @@ function pollGamepads(deltaTime) {
           if (!bind || (bind.type !== 'padButton' && bind.type !== 'padAxis')) return;
 
           let isPressed = false;
-
           if (bind.type === 'padButton' && gp.index === bind.padIndex) {
             isPressed = gp.buttons[bind.buttonIndex] && gp.buttons[bind.buttonIndex].pressed;
-          } else if (bind.type === 'padAxis' && gp.index === bind.padIndex) {
-            const axisVal = gp.axes[bind.axisIndex];
-            isPressed = bind.direction > 0 ? axisVal > 0.5 : axisVal < -0.5;
           }
 
           const stateKey = `${pKey}_${action}`;
@@ -987,7 +825,6 @@ function bindGamepadInput(btnElement, bindObj) {
   updateKeyLabels();
 }
 
-// MODAL & AUDIO UI
 const modal = document.getElementById('settings-modal');
 document.getElementById('open-settings-btn').addEventListener('click', () => modal.classList.add('active'));
 document.getElementById('close-settings-btn').addEventListener('click', () => modal.classList.remove('active'));
@@ -1005,7 +842,6 @@ function formatBindLabel(bind) {
   if (!bind) return '-';
   if (bind.type === 'key') return bind.code.replace('Key', '').replace('Arrow', '');
   if (bind.type === 'padButton') return `P${bind.padIndex + 1}-Btn${bind.buttonIndex}`;
-  if (bind.type === 'padAxis') return `P${bind.padIndex + 1}-Axis${bind.axisIndex}${bind.direction > 0 ? '+' : '-'}`;
   return '-';
 }
 
