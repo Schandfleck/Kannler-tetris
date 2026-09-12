@@ -7,109 +7,113 @@
   <link rel="stylesheet" href="/css/styles.css">
 </head>
 <body>
-
-  <!-- MODUS AUSWAHLMENÜ -->
-  <div id="mode-selection" class="mode-menu">
-    <h1><img src="/pics/title.png" alt="Title Top" id="main-title-top-img"> </h1>
-    <h1><img src="/pics/titlebottom.png" alt="Tetris Multiplayer" id="main-title-screen-img"></h1>
-    <div class="menu-buttons">
-      <button class="btn-menu2" id="btn-tournament-mode">🏆 Lokales Turnier (Bracket)</button>
-    </div>
-  </div>
-  <img src="/pics/wappen.png" alt="Kandel Wappen" id="menu-bottom-right-img">
-
-  <!-- TURNIER ERSTELLEN MODAL -->
-  <div id="tournament-selection" class="hidden" style="background: rgba(10,12,20,0.95); padding: 30px; border-radius: 12px; text-align: center; border: 2px solid #00f0f0; max-width: 500px; margin: auto;">
-    <h2 style="color: #00f0f0; margin-bottom: 20px;">🏆 Neues Turnier Erstellen</h2>
-
-    <div style="margin-bottom: 20px;">
-      <label style="color: #aaa; display: block; margin-bottom: 8px;">Anzahl der Spieler:</label>
-      <select id="tournament-size-select" style="padding: 10px; font-size: 1rem; border-radius: 6px; background: #181b26; color: #fff; border: 1px solid #00f0f0;">
-        <option value="4">4 Spieler (Halbfinale)</option>
-        <option value="8" selected>8 Spieler (Viertelfinale)</option>
-        <option value="16">16 Spieler (Achtelfinale)</option>
-      </select>
+  <div id="viewport-scaler">
+    <!-- MODUS AUSWAHLMENÜ -->
+    <div id="mode-selection" class="mode-menu">
+      <h1><img src="/pics/title.png" alt="Title Top" id="main-title-top-img"> </h1>
+      <h1><img src="/pics/titlebottom.png" alt="Tetris Multiplayer" id="main-title-screen-img"></h1>
+      <div class="menu-buttons">
+        <button class="btn-menu2" id="btn-tournament-mode">🏆 Lokales Turnier (Bracket)</button>
+      </div>
     </div>
 
-    <div id="player-names-inputs" style="display: flex; flex-direction: column; gap: 8px; max-height: 250px; overflow-y: auto; margin-bottom: 20px; padding-right: 5px;">
-      <!-- Dynamische Eingabefelder für Spielernamen -->
-    </div>
+    <!-- TURNIER ERSTELLEN MODAL -->
+    <div id="tournament-selection" class="hidden" style="background: rgba(10,12,20,0.95); padding: 30px; border-radius: 12px; text-align: center; border: 2px solid #00f0f0; max-width: 500px; margin: auto;">
+      <h2 style="color: #00f0f0; margin-bottom: 20px;">🏆 Neues Turnier Erstellen</h2>
 
-    <button id="btn-start-tournament-creation" style="padding: 12px 24px; font-size: 1rem; font-weight: bold; background: #00ff88; color: #000; border: none; border-radius: 6px; cursor: pointer; width: 100%;">
-      🚀 Turnier im Referee-Dashboard Generieren
-    </button>
-    <br>
-    <button id="btn-tournament-back" style="padding: 8px 16px; margin-top: 15px; cursor: pointer; background: transparent; color: #888; border: none;">⬅ Zurück zum Hauptmenü</button>
-  </div>
+      <div style="margin-bottom: 20px;">
+        <label style="color: #aaa; display: block; margin-bottom: 8px;">Anzahl der Spieler:</label>
+        <select id="tournament-size-select" style="padding: 10px; font-size: 1rem; border-radius: 6px; background: #181b26; color: #fff; border: 1px solid #00f0f0;">
+          <option value="4">4 Spieler (Halbfinale)</option>
+          <option value="8" selected>8 Spieler (Viertelfinale)</option>
+          <option value="16">16 Spieler (Achtelfinale)</option>
+        </select>
+      </div>
 
-  <!-- Solo Level & Modus Auswahl -->
-  <div id="solo-level-selection" class="hidden">
-    <h2>🎯 Modus & Level wählen</h2>
-    <p style="color: #aaa; margin-bottom: 15px;">Wähle ein Level (Ziel: 10.000 Pkt.) oder spiele den Endlos-Modus!</p>
+      <div id="player-names-inputs" style="display: flex; flex-direction: column; gap: 8px; max-height: 250px; overflow-y: auto; margin-bottom: 20px; padding-right: 5px;">
+        <!-- Dynamische Eingabefelder für Spielernamen -->
+      </div>
 
-    <div style="margin-bottom: 20px;">
-      <button id="btn-endless-mode" style="width: 100%; padding: 15px; font-size: 1.2rem; font-weight: bold; background-color: #ff00ff; color: #fff; cursor: pointer; border: none; border-radius: 6px;">
-        ♾️ ENDLOS MODUS
+      <button id="btn-start-tournament-creation" style="padding: 12px 24px; font-size: 1rem; font-weight: bold; background: #00ff88; color: #000; border: none; border-radius: 6px; cursor: pointer; width: 100%;">
+        🚀 Turnier im Referee-Dashboard Generieren
       </button>
+      <br>
+      <button id="btn-tournament-back" style="padding: 8px 16px; margin-top: 15px; cursor: pointer; background: transparent; color: #888; border: none;">⬅ Zurück zum Hauptmenü</button>
     </div>
 
-    <h3>Level Kampagne</h3>
-    <div id="level-buttons-container" style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 20px;"></div>
+    <!-- Solo Level & Modus Auswahl -->
+    <div id="solo-level-selection" class="hidden">
+      <h2>🎯 Modus & Level wählen</h2>
+      <p style="color: #aaa; margin-bottom: 15px;">Wähle ein Level (Ziel: 10.000 Pkt.) oder spiele den Endlos-Modus!</p>
 
-    <button id="btn-back-to-menu" style="padding: 10px 20px;">⬅ Zurück zum Hauptmenü</button>
-  </div>
-
-  <!-- SPIELBEREICH -->
-  <div id="game-wrapper" class="hidden">
-    <div class="top-bar">
-      <div id="status">Warte auf Freigabe durch Referee...</div>
-
-      <div id="score-display" class="hidden" style="color: #ffcc00; font-weight: bold; font-size: 1.1rem;">
-        Punkte: <span id="score-val">0</span> | Level: <span id="level-val">1</span>
+      <div style="margin-bottom: 20px;">
+        <button id="btn-endless-mode" style="width: 100%; padding: 15px; font-size: 1.2rem; font-weight: bold; background-color: #ff00ff; color: #fff; cursor: pointer; border: none; border-radius: 6px;">
+          ♾️ ENDLOS MODUS
+        </button>
       </div>
 
-      <div id="room-display" class="hidden" style="color: #00f0f0; font-weight: bold;">Raum: -</div>
+      <h3>Level Kampagne</h3>
+      <div id="level-buttons-container" style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 20px;"></div>
 
-      <div class="top-right-group">
-        <div id="gamepad-status" class="gamepad-status-badge">🎮 Controller: Nicht erkannt</div>
-        <button class="btn-settings" id="open-settings-btn">⚙️ Steuerung</button>
-      </div>
+      <button id="btn-back-to-menu" style="padding: 10px 20px;">⬅ Zurück zum Hauptmenü</button>
     </div>
 
-    <div class="arena-container">
-      <!-- SPIELER 1 -->
-      <div class="player-area" id="player-1-area">
-        <div class="side-panel">
-          <div class="player-name" id="p1-title">Spieler 1</div>
-          <div class="panel-box">
-            <div class="panel-title">Hold</div>
-            <canvas id="hold-board-1" width="96" height="96"></canvas>
+    <!-- SPIELBEREICH -->
+    <div id="game-wrapper" class="hidden">
+      <div class="arena-container">
+        <!-- SPIELER 1 -->
+        <div class="player-area" id="player-1-area">
+          <div class="side-panel">
+            <div class="player-name" id="p1-title">Spieler 1</div>
+            <div class="panel-box">
+              <div class="panel-title">Hold</div>
+              <canvas id="hold-board-1" width="96" height="96"></canvas>
+            </div>
+            <div class="panel-box">
+              <div class="panel-title">Next</div>
+              <canvas id="next-board-1" width="96" height="96"></canvas>
+            </div>
           </div>
-          <div class="panel-box">
-            <div class="panel-title">Next</div>
-            <canvas id="next-board-1" width="96" height="96"></canvas>
+          <canvas id="board-1" class="board-canvas" width="240" height="480"></canvas>
+        </div>
+
+        <!-- SPIELER 2 -->
+        <div class="player-area" id="player-2-area">
+          <canvas id="board-2" class="board-canvas" width="240" height="480"></canvas>
+          <div class="side-panel">
+            <div class="player-name p2-name" id="p2-title">Spieler 2</div>
+            <div class="panel-box">
+              <div class="panel-title">Hold</div>
+              <canvas id="hold-board-2" width="96" height="96"></canvas>
+            </div>
+            <div class="panel-box">
+              <div class="panel-title">Next</div>
+              <canvas id="next-board-2" width="96" height="96"></canvas>
+            </div>
           </div>
         </div>
-        <canvas id="board-1" class="board-canvas" width="240" height="480"></canvas>
       </div>
+    </div> <!-- Ende game-wrapper -->
+  </div> <!-- Ende viewport-scaler -->
 
-      <!-- SPIELER 2 -->
-      <div class="player-area" id="player-2-area">
-        <canvas id="board-2" class="board-canvas" width="240" height="480"></canvas>
-        <div class="side-panel">
-          <div class="player-name p2-name" id="p2-title">Spieler 2</div>
-          <div class="panel-box">
-            <div class="panel-title">Hold</div>
-            <canvas id="hold-board-2" width="96" height="96"></canvas>
-          </div>
-          <div class="panel-box">
-            <div class="panel-title">Next</div>
-            <canvas id="next-board-2" width="96" height="96"></canvas>
-          </div>
-        </div>
-      </div>
+  <!-- TOP-BAR: fix am Bildschirmrand, unabhängig von der Skalierung -->
+  <div class="top-bar hidden" id="top-bar">
+    <div id="status">Warte auf Freigabe durch Referee...</div>
+
+    <div id="score-display" class="hidden" style="color: #ffcc00; font-weight: bold; font-size: 1.1rem;">
+      Punkte: <span id="score-val">0</span> | Level: <span id="level-val">1</span>
+    </div>
+
+    <div id="room-display" class="hidden" style="color: #00f0f0; font-weight: bold;">Raum: -</div>
+
+    <div class="top-right-group">
+      <div id="gamepad-status" class="gamepad-status-badge">🎮 Controller: Nicht erkannt</div>
+      <button class="btn-settings" id="open-settings-btn">⚙️ Steuerung</button>
     </div>
   </div>
+
+  <!-- WAPPEN: fix in der Bildschirmecke, unabhängig von der Skalierung -->
+  <img src="/pics/wappen.png" alt="Kandel Wappen" id="menu-bottom-right-img">
 
   <!-- EINSTELLUNGEN MODAL -->
   <div class="modal-overlay" id="settings-modal">
@@ -148,6 +152,7 @@
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/scale.js"></script>
   <script src="/js/game.js"></script>
 </body>
 </html>

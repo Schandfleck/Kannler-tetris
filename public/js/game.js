@@ -1,7 +1,9 @@
 const socket = typeof io !== 'undefined' ? io() : null;
 
 const COLS = 10;
-const ROWS = 20;
+const VISIBLE_ROWS = 20;
+const BUFFER_ROWS = 2;
+const ROWS = VISIBLE_ROWS + BUFFER_ROWS;
 const BLOCK_SIZE = 24;
 
 let gameMode = null; // 'solo', 'endless', 'tournament_local' oder 'online'
@@ -115,6 +117,7 @@ channel.onmessage = (event) => {
     document.getElementById('mode-selection').classList.add('hidden');
     document.getElementById('tournament-selection').classList.add('hidden');
     document.getElementById('game-wrapper').classList.remove('hidden');
+    document.getElementById('top-bar').classList.remove('hidden');
 
     document.getElementById('player-2-area').classList.remove('hidden');
     document.getElementById('p2-controls-col').style.display = 'block';
@@ -241,6 +244,7 @@ function renderSoloLevelSelection() {
 function setupGameUI() {
   document.getElementById('mode-selection').classList.add('hidden');
   document.getElementById('game-wrapper').classList.remove('hidden');
+  document.getElementById('top-bar').classList.remove('hidden');
 
   if (gameMode === 'solo' || gameMode === 'endless') {
     document.getElementById('player-2-area').classList.add('hidden');
@@ -273,7 +277,7 @@ function createPlayer(id) {
     currentY: 0,
     heldPieceId: null,
     canHold: true,
-    dropCounter: 0
+    dropCounter: 0,
   };
 }
 
@@ -381,8 +385,8 @@ function spawnPiece(player, specificId = null) {
 
   player.currentPiece = ORIGINAL_SHAPES[player.currentPieceId];
   player.rotationIndex = 0;
-  player.currentY = 0;
   player.currentX = Math.floor((COLS - player.currentPiece[0].length) / 2);
+  player.currentY = 0;
   player.canHold = true;
 
   if (collide(player.grid, player.currentPiece, player.currentX, player.currentY)) {
@@ -393,7 +397,6 @@ function spawnPiece(player, specificId = null) {
     statusEl.style.color = '#ff0055';
 
     if (gameMode === 'tournament_local') {
-      // Wenn Player 1 (ID 1) verliert, gewinnt Player 2 (player2Name)
       const winnerName = (player.id === 1) ? player2Name : player1Name;
 
       statusEl.innerText = `💥 GAME OVER – ${winnerName} GEWINNT!`;
@@ -407,6 +410,8 @@ function spawnPiece(player, specificId = null) {
       statusEl.innerText = `💥 GAME OVER`;
     }
   }
+  player.isSpawning = true;
+  player.spawnAnimTimer = 0;
 }
 
 function holdPiece(player) {
@@ -631,9 +636,9 @@ function drawBoard(player) {
   if (!ctx) return;
   ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
 
-  for (let r = 0; r < ROWS; r++) {
+  for (let r = BUFFER_ROWS; r < ROWS; r++) {
     for (let c = 0; c < COLS; c++) {
-      if (player.grid[r][c] !== 0) drawBlock(ctx, player.grid[r][c], c, r);
+      if (player.grid[r][c] !== 0) drawBlock(ctx, player.grid[r][c], c, r - BUFFER_ROWS);
     }
   }
 }
@@ -649,6 +654,9 @@ function drawActivePiece(player) {
   for (let r = 0; r < N; r++) {
     for (let c = 0; c < N; c++) {
       if (player.currentPiece[r][c] !== 0) {
+        const absoluteRow = player.currentY + r;
+        if (absoluteRow < BUFFER_ROWS) continue; // noch im versteckten Bereich
+
         let origR = r, origC = c;
         if (player.rotationIndex === 1) { origR = N - 1 - c; origC = r; }
         else if (player.rotationIndex === 2) { origR = N - 1 - r; origC = N - 1 - c; }
@@ -659,7 +667,7 @@ function drawActivePiece(player) {
           rot: player.rotationIndex,
           localC: origC - bounds.minC,
           localR: origR - bounds.minR
-        }, player.currentX + c, player.currentY + r);
+        }, player.currentX + c, absoluteRow - BUFFER_ROWS);
       }
     }
   }
@@ -679,8 +687,11 @@ function drawGhostPiece(player) {
   for (let r = 0; r < player.currentPiece.length; r++) {
     for (let c = 0; c < player.currentPiece[r].length; c++) {
       if (player.currentPiece[r][c] !== 0) {
-        ctx.fillRect((player.currentX + c) * BLOCK_SIZE, (ghostY + r) * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
-        ctx.strokeRect((player.currentX + c) * BLOCK_SIZE, (ghostY + r) * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+        const absoluteRow = ghostY + r;
+        if (absoluteRow < BUFFER_ROWS) continue;
+        const canvasRow = absoluteRow - BUFFER_ROWS;
+        ctx.fillRect((player.currentX + c) * BLOCK_SIZE, canvasRow * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+        ctx.strokeRect((player.currentX + c) * BLOCK_SIZE, canvasRow * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
       }
     }
   }
@@ -776,13 +787,12 @@ function pollGamepads(deltaTime) {
       activeKeys.forEach((pKey, pIdx) => {
         Object.keys(controls[pKey]).forEach(action => {
           const bind = controls[pKey][action];
-          if (!bind || (bind.type !== 'padButton' && bind.type !== 'padAxis')) return;
+          if (!bind || bind.type !== 'padButton') return;
 
-          let isPressed = false;
-          if (bind.type === 'padButton' && gp.index === bind.padIndex) {
-            isPressed = gp.buttons[bind.buttonIndex] && gp.buttons[bind.buttonIndex].pressed;
-          }
+          // Nur bearbeiten, wenn dieses Binding wirklich zu DIESEM Gamepad gehört
+          if (gp.index !== bind.padIndex) return;
 
+          const isPressed = gp.buttons[bind.buttonIndex] && gp.buttons[bind.buttonIndex].pressed;
           const stateKey = `${pKey}_${action}`;
           const wasPressed = !!prevGamepadState[stateKey];
 

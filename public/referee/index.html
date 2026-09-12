@@ -24,17 +24,14 @@
     .player-line { display: flex; justify-content: space-between; padding: 6px; border-radius: 4px; margin: 2px 0; background: #181b26; }
     .player-line.winner { background: #005533; color: #00ff88; font-weight: bold; }
     .btn-select-match { width: 100%; margin-top: 8px; background: #00aaff; color: #fff; font-weight: bold; }
+    .btn-restart-match { width: 100%; margin-top: 8px; margin-right: 0; background: #ffaa00; color: #000; font-weight: bold; }
   </style>
 </head>
 <body>
 
   <h1>🏆 Tetris Referee Dashboard</h1>
 
-  <!-- ONLINE RÄUME STEUERUNG -->
-  <div class="card">
-    <h2>🌐 Aktive Online-Räume (Socket.io)</h2>
-    <div id="online-rooms-list">Keine aktiven Online-Räume.</div>
-  </div>
+
 
   <!-- LOKALES BRACKET STEUERUNG -->
   <div class="card">
@@ -232,6 +229,69 @@
       saveAndRender();
     }
 
+    // Löscht kaskadierend alle Ergebnisse, die auf diesem Match aufbauen
+    // (falls der Gewinner bereits in spätere Runden weitergeleitet wurde
+    // und diese Runden ggf. sogar schon gespielt wurden).
+    function clearForwardResults(rIndex, mIndex) {
+      if (rIndex + 1 >= currentTournament.rounds.length) return;
+
+      const nextMatchIndex = Math.floor(mIndex / 2);
+      const isP1 = mIndex % 2 === 0;
+      const nextMatch = currentTournament.rounds[rIndex + 1][nextMatchIndex];
+      if (!nextMatch) return;
+
+      const slotWasFilled = isP1 ? nextMatch.p1 !== '???' : nextMatch.p2 !== '???';
+      if (isP1) nextMatch.p1 = '???';
+      else nextMatch.p2 = '???';
+
+      // Wenn dieses Folge-Match bereits einen Gewinner hatte oder lief,
+      // ist dessen Ergebnis jetzt ungültig -> ebenfalls zurücksetzen und weiter kaskadieren.
+      if (slotWasFilled && (nextMatch.winner !== null || nextMatch.status !== 'pending')) {
+        nextMatch.winner = null;
+        nextMatch.status = 'pending';
+
+        if (
+          currentTournament.activeMatch &&
+          currentTournament.activeMatch.rIndex === rIndex + 1 &&
+          currentTournament.activeMatch.mIndex === nextMatchIndex
+        ) {
+          currentTournament.activeMatch = null;
+        }
+
+        clearForwardResults(rIndex + 1, nextMatchIndex);
+      }
+    }
+
+    // Setzt ein Match zurück (inkl. aller davon abhängigen späteren Runden)
+    // und startet es sofort neu im Spielfenster.
+    function restartMatch(rIndex, mIndex) {
+      if (!currentTournament) return;
+      const match = currentTournament.rounds[rIndex][mIndex];
+      if (!match || match.p2 === 'FREILOS') return; // Freilose können nicht neu gestartet werden
+
+      const confirmRestart = confirm(
+        'Dieses Match wird neu gestartet. Der bisherige Fortschritt dieses Matches (und eventuell bereits weitergeleitete Ergebnisse in späteren Runden) gehen verloren. Fortfahren?'
+      );
+      if (!confirmRestart) return;
+
+      match.winner = null;
+      match.status = 'pending';
+
+      if (
+        currentTournament.activeMatch &&
+        currentTournament.activeMatch.rIndex === rIndex &&
+        currentTournament.activeMatch.mIndex === mIndex
+      ) {
+        currentTournament.activeMatch = null;
+      }
+
+      clearForwardResults(rIndex, mIndex);
+      saveAndRender();
+
+      // Match sofort wieder starten
+      selectAndStartMatch(rIndex, mIndex);
+    }
+
     function renderBracket() {
       const container = document.getElementById('bracket-view');
       const infoEl = document.getElementById('tournament-info');
@@ -274,6 +334,8 @@
             </div>
           `;
 
+          const isBye = match.p2 === 'FREILOS';
+
           if (match.status !== 'finished') {
             const btn = document.createElement('button');
             btn.className = 'btn-select-match';
@@ -281,6 +343,15 @@
             btn.disabled = match.status === 'running' || match.p1 === '???' || match.p2 === '???';
             btn.onclick = () => selectAndStartMatch(rIndex, mIndex);
             matchBox.appendChild(btn);
+          }
+
+          // Neustart-Möglichkeit für laufende oder bereits beendete Matches (außer Freilose)
+          if (!isBye && (match.status === 'running' || match.status === 'finished')) {
+            const restartBtn = document.createElement('button');
+            restartBtn.className = 'btn-restart-match';
+            restartBtn.innerText = '🔄 Match neu starten';
+            restartBtn.onclick = () => restartMatch(rIndex, mIndex);
+            matchBox.appendChild(restartBtn);
           }
 
           roundEl.appendChild(matchBox);
